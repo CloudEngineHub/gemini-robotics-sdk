@@ -76,7 +76,7 @@ class GeminiLiveAPIHandler:
       config: framework_config.AgentFrameworkConfig,
       live_config: types.LiveConnectConfigDict | types.LiveConnectConfig,
       camera_names: Sequence[str],
-      initial_camera_names: dict[str, str] | None = None,
+      stream_name_to_camera_name: dict[str, str] | None = None,
       http_options: dict[str, str] | None = None,
       ignore_image_inputs: bool = False,
   ):
@@ -88,11 +88,16 @@ class GeminiLiveAPIHandler:
       live_config: The live API configuration. This will usually be scene
         specific, and created by an "agent" module connecting handlers and
         embodiments.
-      camera_names: The names of the camera streams available to the model.
-        Currently, only the first camera is used.
-      initial_camera_names: The names of the cameras to use initially alongside
-        how they will be captioned for the model. If not provided, the first
-        camera in the list of camera names will be used.
+      camera_names: The names of the camera streams available from the
+        embodiment.
+      stream_name_to_camera_name: Mapping from image stream (endpoint) names to
+        camera names. It specifies which camera streams are sent to the
+        orchestrator model as well as the names with which to prepend the
+        images. If None, the first camera is used and an empty string will be
+        prepended. Note that prepending of the camera name is only supported
+        under the following conditions:
+            `update_vision_after_fr=True` AND
+            `turn_coverage=TURN_INCLUDES_ONLY_ACTIVITY`
       http_options: HTTP options to use for the client.
       ignore_image_inputs: Whether to ignore image inputs. In this mode, the
         handler will not send any images to the model.
@@ -120,14 +125,19 @@ class GeminiLiveAPIHandler:
     self._last_image_received = {}
     self._ignore_image_inputs = ignore_image_inputs
     self._camera_names = camera_names
-    initial_camera_names = initial_camera_names or {camera_names[0]: ""}
-    invalid_cameras = set(initial_camera_names.keys()) - set(camera_names)
+    self._stream_name_to_camera_name = (
+        stream_name_to_camera_name
+        if stream_name_to_camera_name is not None
+        else {camera_names[0]: ""}
+    )
+    invalid_cameras = (
+        set(self._stream_name_to_camera_name.keys()) - set(camera_names)
+    )
     if invalid_cameras:
       raise ValueError(
           f"Initial camera names {invalid_cameras} not found in available"
           f" cameras {camera_names}."
       )
-    self._current_camera_names = initial_camera_names
     self._turn_coverage = self._get_turn_coverage()
 
   async def connect(self):
@@ -307,16 +317,19 @@ class GeminiLiveAPIHandler:
       return
 
     stream_name = event.metadata[constants.STREAM_NAME_METADATA_KEY]
-    if stream_name not in self._current_camera_names.keys():
-      logging.info(
-          "image event stream name %s not in current camera names", stream_name
+    if stream_name not in self._stream_name_to_camera_name.keys():
+      logging.log_every_n_seconds(
+          logging.DEBUG,
+          "image event stream name %s not in current camera names",
+          10,
+          stream_name,
       )
       return
 
     try:
       if self._turn_coverage == types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY:
         self._last_image_received[stream_name] = types.Blob(
-            display_name=self._current_camera_names[stream_name],
+            display_name=self._stream_name_to_camera_name[stream_name],
             data=event.data,
             mime_type="image/jpeg",
         )

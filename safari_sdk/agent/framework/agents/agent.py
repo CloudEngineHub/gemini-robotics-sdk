@@ -27,6 +27,7 @@ from safari_sdk.agent.framework.event_bus import event_bus
 from safari_sdk.agent.framework.event_bus import tool_call_event_handler
 from safari_sdk.agent.framework.live_api import live_handler
 from safari_sdk.agent.framework.tools import tool as tool_lib
+from safari_sdk.agent.framework.utils import http_options as http_options_util
 
 
 @dataclasses.dataclass(frozen=True)
@@ -52,8 +53,7 @@ class Agent(metaclass=abc.ABCMeta):
       config: framework_config.AgentFrameworkConfig,
       embodiment: embodiment_lib.Embodiment,
       system_prompt: str,
-      http_options: dict[str, str] | None = None,
-      initial_camera_names: Mapping[str, str] | None = None,
+      stream_name_to_camera_name: Mapping[str, str] | None = None,
       ignore_vision_inputs: bool = False,
   ):
     """Initializes the agent.
@@ -63,14 +63,22 @@ class Agent(metaclass=abc.ABCMeta):
       config: The agent framework configuration object.
       embodiment: The embodiment to use for the agent.
       system_prompt: The system prompt to use for the agent.
-      http_options: The HTTP options to use for the Gemini API VLM.
-      initial_camera_names: The names of the cameras to use initially alongside
-        how they will be captioned for the model. If not provided, the first
-        camera in the list of camera names will be used.
+      stream_name_to_camera_name: Mapping from image stream (endpoint) names to
+        camera names. It specifies which camera streams are sent to the
+        orchestrator model as well as the names with which to prepend the
+        images. If None, the first camera is used and an empty string will be
+        prepended. Note that prepending of the camera name is only supported
+        under the following conditions:
+            `update_vision_after_fr=True` AND
+            `turn_coverage=TURN_INCLUDES_ONLY_ACTIVITY`
       ignore_vision_inputs: Whether to ignore vision inputs. In this mode, the
         handler will not send any images to the model.
     """
     self._config = config
+
+    # Get the HTTP options for live API.
+    http_options = http_options_util.get_http_options(config)
+
     self._embodiment = embodiment
     all_tools_with_use = self._get_all_tools(
         embodiment_tools=embodiment.tools,
@@ -99,7 +107,7 @@ class Agent(metaclass=abc.ABCMeta):
         config=config,
         live_config=live_api_config,
         camera_names=embodiment.camera_stream_names,
-        initial_camera_names=initial_camera_names,
+        stream_name_to_camera_name=stream_name_to_camera_name,
         http_options=http_options,
         ignore_image_inputs=ignore_vision_inputs,
     )

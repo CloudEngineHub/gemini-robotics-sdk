@@ -110,7 +110,23 @@ class RunInstructionUntilDoneTool(tool.Tool):
     self._call_id = call_id
     start_time = time.time()
     # Sends instruction to the robot.
-    await self._run_instruction_tool.fn(instruction, call_id)
+    run_response: types.FunctionResponse = (
+        await self._run_instruction_tool.fn(instruction, call_id)
+    )
+    if "is_rejected" in run_response.response:
+      if bool(run_response.response["is_rejected"]):
+        # Special treatment for when run_instruction_tool returned with
+        # "rejected" message. This is useful for covering the following cases:
+        # 1. The robot backend server is running but the downstream robot is not
+        #    reachable or in a bad state.
+        # 2. The instruction is rejected by the user under data collection mode.
+        return types.FunctionResponse(
+            response={
+                "subtask": instruction,
+                "subtask_status": "Instruction is rejected.",
+            },
+            will_continue=False,
+        )
     # Check if instruction was successful.
     sd_response: types.FunctionResponse = await self._success_detector_tool.fn(
         instruction, call_id
