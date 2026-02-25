@@ -13,28 +13,30 @@
 #  limitations under the License.
 
 from collections.abc import Mapping
+import copy
 import glob
-import io
 import os
+import re
 import shutil
 from typing import Any, cast
+from unittest import mock
 
 import dm_env
 from dm_env import specs
 from gdm_robotics.interfaces import types as gdmr_types
 from gdm_robotics.testing import specs_utils
 import numpy as np
-from PIL import Image
 
 from absl.testing import absltest
 from absl.testing import parameterized
 from safari_sdk.logging.python import constants
-from safari_sdk.logging.python import episodic_logger
 from safari_sdk.logging.python import mcap_parser_utils
-
+from safari_sdk.logging.python import episodic_logger
+from safari_sdk.logging.python import session_manager
 
 _TEST_AGENT_ID = "fake_agent_id_for_test"
 _TEST_TASK_ID = "fake_task_id_for_test"
+_TEST_TASK_ID_2 = "fake_task_id_for_test_2"
 _TEST_PROPRIO_KEY = "joints_pos"
 _DEFAULT_NUMBER_STEPS = 3
 
@@ -66,14 +68,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     initial_timestep = self._generate_timestep(
@@ -95,6 +99,58 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     logger.write()
     self.assertFalse(logger._is_recording)
+
+  def test_session_manager_called_with_correct_topics(self):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    with mock.patch.object(
+        session_manager, "SessionManager", autospec=True
+    ) as mock_session_manager:
+      episodic_logger.EpisodicLogger.create(
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              image_observation_keys=[],
+              policy_extra_spec={},
+          )
+      )
+
+      mock_session_manager.assert_called_once()
+      _, kwargs = mock_session_manager.call_args
+      self.assertEqual(
+          kwargs["required_topics"],
+          {
+              constants.ACTION_TOPIC_NAME,
+              constants.TIMESTEP_TOPIC_NAME,
+          },
+      )
+      self.assertEqual(
+          kwargs["topics"],
+          {
+              constants.ACTION_TOPIC_NAME,
+              constants.TIMESTEP_TOPIC_NAME,
+              constants.POLICY_EXTRA_TOPIC_NAME,
+          },
+      )
 
   def test_data_is_written_correctly(self):
     timestep_spec = gdmr_types.TimeStepSpec(
@@ -118,14 +174,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     expected_timesteps = []
@@ -160,8 +218,8 @@ class EpisodicLoggerTest(parameterized.TestCase):
         next_timestep=last_timestep,
         policy_extra={},
     )
-
     logger.write()
+    logger.stop()
 
     # Append the last action to the expected actions as the logger will pad the
     # last action with the last corresponding value.
@@ -236,14 +294,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     initial_timestep = self._generate_timestep(
@@ -271,6 +331,8 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
+
     sessions = mcap_parser_utils.read_session_proto_data(
         self._episode_path.full_path, constants.SESSION_TOPIC_NAME
     )
@@ -288,6 +350,115 @@ class EpisodicLoggerTest(parameterized.TestCase):
     self.assertGreaterEqual(
         session.interval.stop_nsec, messages[-1].publish_time
     )
+
+  def test_publish_times_are_within_file_metadata_interval(self):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
+    )
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    logger.reset(initial_timestep)
+
+    for _ in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      action = specs_utils.valid_value_for_spec(action_spec)
+
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
+    action = specs_utils.valid_value_for_spec(action_spec)
+    logger.record_action_and_next_timestep(
+        action=action,
+        next_timestep=last_timestep,
+        policy_extra={},
+    )
+
+    logger.write()
+    logger.stop()
+
+    file_metadata_protos = mcap_parser_utils.read_file_metadata_proto_data(
+        self._episode_path.full_path, constants.FILE_METADATA_TOPIC_NAME
+    )
+    # There should only be one file metadata for a single file.
+    self.assertLen(file_metadata_protos, 1)
+    file_metadata = file_metadata_protos[0]
+
+    # Read the raw mcap messages to get the publish times.
+    # The stream coverages of the file metadata should contain the publish
+    # times.
+    timestep_messages = mcap_parser_utils.read_raw_mcap_messages(
+        self._episode_path.full_path, constants.TIMESTEP_TOPIC_NAME
+    )
+    action_messages = mcap_parser_utils.read_raw_mcap_messages(
+        self._episode_path.full_path, constants.ACTION_TOPIC_NAME
+    )
+    policy_extra_messages = mcap_parser_utils.read_raw_mcap_messages(
+        self._episode_path.full_path, constants.POLICY_EXTRA_TOPIC_NAME
+    )
+    session_messages = mcap_parser_utils.read_raw_mcap_messages(
+        self._episode_path.full_path, constants.SESSION_TOPIC_NAME
+    )
+
+    min_publish_time = min(
+        [
+            timestep_messages[0].publish_time,
+            action_messages[0].publish_time,
+            policy_extra_messages[0].publish_time,
+            session_messages[0].publish_time,
+        ],
+        default=0,
+    )
+    max_publish_time = max(
+        [
+            timestep_messages[-1].publish_time,
+            action_messages[-1].publish_time,
+            policy_extra_messages[-1].publish_time,
+            session_messages[-1].publish_time,
+        ],
+        default=0,
+    )
+
+    for stream_coverage in file_metadata.stream_coverages:
+      self.assertEqual(stream_coverage.interval.start_nsec, min_publish_time)
+      self.assertGreaterEqual(
+          stream_coverage.interval.stop_nsec, max_publish_time
+      )
 
   def test_reward_is_scalar(self):
     timestep_spec = gdmr_types.TimeStepSpec(
@@ -309,14 +480,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     expected_timesteps = []
@@ -353,6 +526,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -405,14 +579,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     expected_timesteps = []
@@ -445,6 +621,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -494,14 +671,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        image_observation_keys=[],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
     )
 
     expected_timesteps = []
@@ -538,6 +717,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -590,14 +770,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            policy_extra_spec={},
+        )
     )
 
     expected_timesteps = []
@@ -630,6 +812,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -659,6 +842,125 @@ class EpisodicLoggerTest(parameterized.TestCase):
     for idx, _ in enumerate(timesteps):
       self._assert_timestep_is_close(timesteps[idx], expected_timesteps[idx])
 
+  def test_action_is_dict(self):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = {
+        "action1": specs.BoundedArray(
+            shape=(5,),
+            dtype=np.float32,
+            minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+            maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+        ),
+        "action2": specs.BoundedArray(
+            shape=(5,),
+            dtype=np.float32,
+            minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+            maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+        ),
+    }
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
+    )
+
+    expected_actions = []
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    # Override the discount to be a scalar.
+    initial_timestep = initial_timestep._replace(discount=np.float32(1.0))
+    logger.reset(initial_timestep)
+
+    for _ in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      # Override the discount to be a scalar.
+      next_timestep = next_timestep._replace(discount=np.float32(1.0))
+      action = specs_utils.valid_value_for_spec(action_spec)
+
+      expected_actions.append(action)
+
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
+    last_action = specs_utils.valid_value_for_spec(action_spec)
+
+    expected_actions.append(last_action)
+
+    logger.record_action_and_next_timestep(
+        action=last_action,
+        next_timestep=last_timestep,
+        policy_extra={},
+    )
+
+    logger.write()
+    logger.stop()
+
+    # Append the last action to the expected actions as internally the logger
+    # will pad the last values.
+    expected_actions.append(last_action)
+
+    mcap_proto_data = mcap_parser_utils.read_proto_data(
+        self._episode_path.full_path,
+        constants.TIMESTEP_TOPIC_NAME,
+        constants.ACTION_TOPIC_NAME,
+        constants.POLICY_EXTRA_TOPIC_NAME,
+    )
+    timesteps_examples = mcap_proto_data.timesteps
+    actions_examples = mcap_proto_data.actions
+    policy_extras_examples = mcap_proto_data.policy_extra
+
+    _, actions, _ = mcap_parser_utils.parse_examples_to_dm_env_types(
+        timestep_spec,
+        action_spec,
+        {},
+        timesteps_examples,
+        actions_examples,
+        policy_extras_examples,
+        constants.STEP_TYPE_KEY,
+        constants.OBSERVATION_KEY_PREFIX,
+        constants.REWARD_KEY,
+        constants.DISCOUNT_KEY,
+        constants.ACTION_KEY_PREFIX,
+        constants.POLICY_EXTRA_PREFIX,
+    )
+
+    for idx, _ in enumerate(actions):
+      if isinstance(actions[idx], Mapping):
+        keys = actions[idx].keys()
+        expected_actions_keys = cast(
+            Mapping[str, np.ndarray], expected_actions[idx]
+        ).keys()
+        self.assertSameElements(keys, expected_actions_keys)
+        for key in keys:
+          np.testing.assert_allclose(
+              actions[idx][key], expected_actions[idx][key]
+          )
+
   def test_has_policy_extra(self):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -684,14 +986,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        policy_extra_spec=policy_extra_spec,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            policy_extra_spec=policy_extra_spec,
+        )
     )
 
     expected_timesteps = []
@@ -732,6 +1036,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     expected_actions.append(action)
     expected_policy_extras.append(policy_extra)
     logger.write()
+    logger.stop()
 
     # Append the action and last policy extra to the expected policy extras as
     # internally the logger will pad the last values.
@@ -798,10 +1103,6 @@ class EpisodicLoggerTest(parameterized.TestCase):
           testcase_name="string",
           string_type=str,
       ),
-      dict(
-          testcase_name="bytes",
-          string_type=bytes,
-      ),
   )
   def test_string_values_are_written_correctly(self, string_type):
     timestep_spec = gdmr_types.TimeStepSpec(
@@ -846,14 +1147,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        policy_extra_spec=policy_extra_spec,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            policy_extra_spec=policy_extra_spec,
+        )
     )
 
     expected_timesteps = []
@@ -898,6 +1201,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     # Append the action and last policy extra to the expected policy extras as
     # internally the logger will pad the last values.
@@ -993,7 +1297,6 @@ class EpisodicLoggerTest(parameterized.TestCase):
           )
 
     for idx, _ in enumerate(actions):
-      # action = cast(Mapping[str, np.ndarray], actions[idx])
       np.testing.assert_allclose(actions[idx], expected_actions[idx])
 
     for idx, _ in enumerate(policy_extras):
@@ -1034,6 +1337,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
           ),
           action=np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
           policy_extra={"extra1": np.array([1.0, 2.0, 3.0], dtype=np.float32)},
+          expected_error_message="Expected shape (4,) but found (5,)",
       ),
       dict(
           testcase_name="wrong_action",
@@ -1048,6 +1352,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
           ),
           action=np.array([1.0, 2.0, 3.0, 4.0, 5.0], dtype=np.float32),
           policy_extra={"extra1": np.array([1.0, 2.0, 3.0], dtype=np.float32)},
+          expected_error_message="Values were not all within bounds",
       ),
       dict(
           testcase_name="wrong_policy_extra",
@@ -1062,6 +1367,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
           ),
           action=np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
           policy_extra={"extra1": np.array([1.0, 2.0], dtype=np.float32)},
+          expected_error_message="Expected shape (3,) but found (2,)",
       ),
       dict(
           testcase_name="wrong_reward",
@@ -1076,6 +1382,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
           ),
           action=np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
           policy_extra={"extra1": np.array([1.0, 2.0, 3.0], dtype=np.float32)},
+          expected_error_message="Expected shape () but found (2,)",
       ),
       dict(
           testcase_name="wrong_discount",
@@ -1090,6 +1397,9 @@ class EpisodicLoggerTest(parameterized.TestCase):
           ),
           action=np.array([0.0, 0.0, 0.0, 0.0, 0.0], dtype=np.float32),
           policy_extra={"extra1": np.array([1.0, 2.0, 3.0], dtype=np.float32)},
+          expected_error_message=(
+              "The two structures don't have the same nested structure"
+          ),
       ),
   )
   def test_logger_validates_data(
@@ -1097,6 +1407,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
       timestep: dm_env.TimeStep,
       action: gdmr_types.ActionType,
       policy_extra: Mapping[str, Any],
+      expected_error_message: str,
   ):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -1120,14 +1431,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec=policy_extra_spec,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec=policy_extra_spec,
+        )
     )
 
     initial_timestep = self._generate_timestep(
@@ -1135,12 +1448,70 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
     logger.reset(initial_timestep)
 
-    logger.record_action_and_next_timestep(
-        action=action, next_timestep=timestep, policy_extra=policy_extra
-    )
     # Note: the logger does not validate that the last timestep is LAST.
-    with self.assertRaises(ValueError):
-      logger.write()
+    regex_pattern = re.escape(expected_error_message)
+    with self.assertRaisesRegex(ValueError, regex_pattern):
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=timestep, policy_extra=policy_extra
+      )
+    logger.write()
+    logger.stop()
+
+  @parameterized.named_parameters(
+      dict(
+          testcase_name="unbounded_array",
+          action_spec=gdmr_types.UnboundedArraySpec(
+              shape=(5,), dtype=np.float32
+          ),
+          expected_error_message=(
+              "action_spec must be a BoundedArray or a Mapping of"
+              " BoundedArrays."
+          ),
+      ),
+      dict(
+          testcase_name="mapping_of_unbounded_arrays",
+          action_spec={
+              "action1": gdmr_types.UnboundedArraySpec(
+                  shape=(5,), dtype=np.float32
+              ),
+              "action2": gdmr_types.UnboundedArraySpec(
+                  shape=(3,), dtype=np.float64
+              ),
+          },
+          expected_error_message=(
+              "action_spec must be a mapping of BoundedArrays"
+          ),
+      ),
+  )
+  def test_validates_action_spec(
+      self, action_spec: gdmr_types.ActionSpec, expected_error_message: str
+  ):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+        },
+    )
+    policy_extra_spec = {
+        "extra1": specs.Array(shape=(3,), dtype=np.float32),
+    }
+
+    with self.assertRaisesRegex(TypeError, expected_error_message):
+      _ = episodic_logger.EpisodicLogger.create(
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              image_observation_keys=[],
+              proprioceptive_observation_keys=["feature1"],
+              policy_extra_spec=policy_extra_spec,
+          )
+      )
 
   @parameterized.named_parameters(
       dict(
@@ -1247,19 +1618,27 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec=policy_extra_spec,
-        validate_data_with_spec=False,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec=policy_extra_spec,
+            validate_data_with_spec=False,
+        )
     )
 
-    initial_timestep = self._generate_timestep(
-        timestep_spec, dm_env.StepType.FIRST
+    # The dimensions of each timestep are different from the spec, but
+    # they still must match, otherwise they cannot be converted to a numpy
+    # array.
+    initial_timestep = dm_env.TimeStep(
+        step_type=dm_env.StepType.FIRST,
+        reward=copy.deepcopy(timestep.reward),
+        discount=copy.deepcopy(timestep.discount),
+        observation=copy.deepcopy(timestep.observation),
     )
     logger.reset(initial_timestep)
 
@@ -1268,6 +1647,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
     # Note: the logger does not validate that the last timestep is LAST.
     logger.write()
+    logger.stop()
 
   def test_writing_multiple_episodes_can_be_read_correctly(self):
     timestep_spec = gdmr_types.TimeStepSpec(
@@ -1288,14 +1668,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec={},
+        )
     )
 
     for _ in range(2):
@@ -1329,6 +1711,8 @@ class EpisodicLoggerTest(parameterized.TestCase):
       )
 
       logger.write()
+
+    logger.stop()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -1367,14 +1751,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec={},
+        )
     )
 
     initial_timestep = self._generate_timestep(
@@ -1405,6 +1791,9 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    # Flush the logger to ensure that the data is written to the mcap files
+    # before we read the data.
+    logger.flush()
 
     mcap_proto_data = mcap_parser_utils.read_proto_data(
         self._episode_path.full_path,
@@ -1424,6 +1813,8 @@ class EpisodicLoggerTest(parameterized.TestCase):
         self._episode_path.full_path
     )  # Clean up directory so that we load only the second episode.
     # We now write a second episode and check that the data is cleared.
+
+    os.makedirs(self._episode_path.full_path)  # Recreate directory.
 
     expected_timesteps = []
     expected_actions = []
@@ -1463,6 +1854,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     expected_actions.append(action)
 
     logger.write()
+    logger.stop()
 
     # Now check that the data is only for the second episode.
     mcap_proto_data = mcap_parser_utils.read_proto_data(
@@ -1531,14 +1923,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec={},
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec={},
+        )
     )
 
     for _ in range(2):
@@ -1572,6 +1966,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
       )
 
       logger.write()
+    logger.stop()
 
     episode_paths = glob.glob(
         os.path.join(self._episode_path.full_path, "*", "*", "*", "*.mcap")
@@ -1606,15 +2001,17 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec=policy_extra_spec,
-        file_shard_size_limit_bytes=50,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec=policy_extra_spec,
+            file_shard_size_limit_bytes=50,
+        )
     )
 
     initial_timestep = self._generate_timestep(
@@ -1646,6 +2043,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     logger.write()
+    logger.stop()
 
     # Check the number of mcap files created. The number of files should be
     # greater than 1.
@@ -1678,15 +2076,17 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec=policy_extra_spec,
-        file_shard_size_limit_bytes=50,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec=policy_extra_spec,
+            file_shard_size_limit_bytes=50,
+        )
     )
 
     expected_timesteps = []
@@ -1735,6 +2135,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     expected_policy_extras.append(policy_extra)
 
     logger.write()
+    logger.stop()
 
     # Check that the date can be reconstructed in the correct order.
     mcap_proto_data = mcap_parser_utils.read_proto_data(
@@ -1792,6 +2193,84 @@ class EpisodicLoggerTest(parameterized.TestCase):
             policy_extras[idx][key], expected_policy_extras[idx][key]
         )
 
+  def test_file_metadata_proto_per_shard(self):
+    """Tests that a FileMetadata proto is written for each shard."""
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float64),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+            file_shard_size_limit_bytes=50,
+        )
+    )
+
+    expected_timesteps = []
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    # Override the reward to be a scalar.
+    initial_timestep = initial_timestep._replace(reward=1.0)
+    expected_timesteps.append(initial_timestep)
+    logger.reset(initial_timestep)
+
+    for _ in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      # Override the reward to be a scalar.
+      next_timestep = next_timestep._replace(reward=1.0)
+      action = specs_utils.valid_value_for_spec(action_spec)
+
+      expected_timesteps.append(next_timestep)
+
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
+    expected_timesteps.append(last_timestep)
+    logger.record_action_and_next_timestep(
+        action=specs_utils.valid_value_for_spec(action_spec),
+        next_timestep=last_timestep,
+        policy_extra={},
+    )
+
+    logger.write()
+    logger.stop()
+
+    mcap_file_paths = mcap_parser_utils.get_mcap_file_paths(
+        self._episode_path.full_path
+    )
+    file_metadata_protos = mcap_parser_utils.read_file_metadata_proto_data(
+        self._episode_path.full_path, constants.FILE_METADATA_TOPIC_NAME
+    )
+    self.assertLen(file_metadata_protos, len(mcap_file_paths))
+
   def test_no_data_is_written_if_reset_or_record_action_is_not_called(self):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -1816,16 +2295,19 @@ class EpisodicLoggerTest(parameterized.TestCase):
     }
 
     logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        timestep_spec=timestep_spec,
-        image_observation_keys=[],
-        proprioceptive_observation_keys=["feature1"],
-        policy_extra_spec=policy_extra_spec,
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            proprioceptive_observation_keys=["feature1"],
+            policy_extra_spec=policy_extra_spec,
+        )
     )
     logger.write()
+    logger.stop()
     episode_paths = glob.glob(
         os.path.join(self._episode_path.full_path, "*", "*", "*", "*.mcap")
     )
@@ -1871,14 +2353,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
     with self.assertRaises(ValueError):
       episodic_logger.EpisodicLogger.create(
-          agent_id=agent_id,
-          task_id=task_id,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          timestep_spec=timestep_spec,
-          proprioceptive_observation_keys=[],
-          image_observation_keys=[],
-          policy_extra_spec={},
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=agent_id,
+              task_id=task_id,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              proprioceptive_observation_keys=[],
+              image_observation_keys=[],
+              policy_extra_spec={},
+          )
       )
 
   def test_invalid_camera_name_raises_value_error(self):
@@ -1907,14 +2391,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
         " spec.",
     ):
       episodic_logger.EpisodicLogger.create(
-          agent_id=_TEST_AGENT_ID,
-          task_id=_TEST_TASK_ID,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          timestep_spec=timestep_spec,
-          proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-          image_observation_keys=invalid_image_observation_keys,
-          policy_extra_spec=policy_extra_spec,
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+              image_observation_keys=invalid_image_observation_keys,
+              policy_extra_spec=policy_extra_spec,
+          )
       )
 
   def test_camera_name_validation_fails_if_observation_spec_not_mapping(self):
@@ -1938,14 +2424,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
         "Observation in timestep_spec must be a Mapping.",
     ):
       episodic_logger.EpisodicLogger.create(
-          agent_id=_TEST_AGENT_ID,
-          task_id=_TEST_TASK_ID,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          proprioceptive_observation_keys=["feature1"],
-          timestep_spec=timestep_spec_non_mapping_obs,
-          image_observation_keys=image_observation_keys_for_type_error,
-          policy_extra_spec=policy_extra_spec,
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              proprioceptive_observation_keys=["feature1"],
+              timestep_spec=timestep_spec_non_mapping_obs,
+              image_observation_keys=image_observation_keys_for_type_error,
+              policy_extra_spec=policy_extra_spec,
+          )
       )
 
   def test_invalid_proprioceptive_observation_keys_not_in_observation_raises_key_error(
@@ -1972,14 +2460,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
         f"Proprio key {invalid_proprio_key} not found in observation spec.",
     ):
       episodic_logger.EpisodicLogger.create(
-          agent_id=_TEST_AGENT_ID,
-          task_id=_TEST_TASK_ID,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          timestep_spec=timestep_spec,
-          proprioceptive_observation_keys=[invalid_proprio_key],
-          image_observation_keys=[],
-          policy_extra_spec={},
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              proprioceptive_observation_keys=[invalid_proprio_key],
+              image_observation_keys=[],
+              policy_extra_spec={},
+          )
       )
 
   def test_invalid_proprio_key_not_spec_array_raises_type_error(self):
@@ -2006,14 +2496,16 @@ class EpisodicLoggerTest(parameterized.TestCase):
         " observation spec.",
     ):
       episodic_logger.EpisodicLogger.create(
-          agent_id=_TEST_AGENT_ID,
-          task_id=_TEST_TASK_ID,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          timestep_spec=timestep_spec,
-          proprioceptive_observation_keys=[proprio_key_to_test],
-          image_observation_keys=[],
-          policy_extra_spec={},
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              proprioceptive_observation_keys=[proprio_key_to_test],
+              image_observation_keys=[],
+              policy_extra_spec={},
+          )
       )
 
   def test_missing_instruction_in_observation_raises_key_error(self):
@@ -2036,15 +2528,406 @@ class EpisodicLoggerTest(parameterized.TestCase):
         "'instruction' is required in timestep_spec.observation.",
     ):
       episodic_logger.EpisodicLogger.create(
-          agent_id=_TEST_AGENT_ID,
-          task_id=_TEST_TASK_ID,
-          output_directory=self._episode_path.full_path,
-          action_spec=action_spec,
-          timestep_spec=timestep_spec,
-          proprioceptive_observation_keys=[],
-          image_observation_keys=[],
-          policy_extra_spec={},
+          episodic_logger.EpisodicLoggerConfig(
+              agent_id=_TEST_AGENT_ID,
+              task_id=_TEST_TASK_ID,
+              output_directory=self._episode_path.full_path,
+              action_spec=action_spec,
+              timestep_spec=timestep_spec,
+              proprioceptive_observation_keys=[],
+              image_observation_keys=[],
+              policy_extra_spec={},
+          )
       )
+
+  def test_data_is_written_correctly_when_batching_is_enabled(self):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+            batch_size=2,
+            # Only one worker to ensure ordering is deterministic.
+            num_workers=1,
+        )
+    )
+
+    expected_timesteps = []
+    expected_actions = []
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    expected_timesteps.append(initial_timestep)
+    logger.reset(initial_timestep)
+
+    for _ in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      action = specs_utils.valid_value_for_spec(action_spec)
+
+      expected_timesteps.append(next_timestep)
+      expected_actions.append(action)
+
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
+    expected_timesteps.append(last_timestep)
+
+    action = specs_utils.valid_value_for_spec(action_spec)
+    expected_actions.append(action)
+    logger.record_action_and_next_timestep(
+        action=action,
+        next_timestep=last_timestep,
+        policy_extra={},
+    )
+    logger.write()
+    logger.stop()
+
+    # Append the last action to the expected actions as the logger will pad the
+    # last action with the last corresponding value.
+    expected_actions.append(action)
+
+    mcap_proto_data = mcap_parser_utils.read_proto_data(
+        self._episode_path.full_path,
+        constants.TIMESTEP_TOPIC_NAME,
+        constants.ACTION_TOPIC_NAME,
+        constants.POLICY_EXTRA_TOPIC_NAME,
+    )
+    timesteps_examples = mcap_proto_data.timesteps
+    actions_examples = mcap_proto_data.actions
+    policy_extras_examples = mcap_proto_data.policy_extra
+
+    timesteps, actions, policy_extras = (
+        mcap_parser_utils.parse_examples_to_dm_env_types(
+            timestep_spec,
+            action_spec,
+            {},
+            timesteps_examples,
+            actions_examples,
+            policy_extras_examples,
+            constants.STEP_TYPE_KEY,
+            constants.OBSERVATION_KEY_PREFIX,
+            constants.REWARD_KEY,
+            constants.DISCOUNT_KEY,
+            constants.ACTION_KEY_PREFIX,
+            constants.POLICY_EXTRA_PREFIX,
+        )
+    )
+
+    for idx, _ in enumerate(timesteps):
+      self._assert_timestep_is_close(timesteps[idx], expected_timesteps[idx])
+
+    for idx, _ in enumerate(actions):
+      if isinstance(actions[idx], Mapping):
+        keys = actions[idx].keys()
+        expected_actions_keys = cast(
+            Mapping[str, np.ndarray], expected_actions[idx]
+        ).keys()
+        self.assertSameElements(keys, expected_actions_keys)
+        for key in keys:
+          np.testing.assert_allclose(
+              actions[idx][key], expected_actions[idx][key]
+          )
+      else:
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+
+    expected_policy_extras = [{}] * (_DEFAULT_NUMBER_STEPS + 2)
+    self.assertEqual(policy_extras, expected_policy_extras)
+
+  def test_set_task_id(self):
+    """Tests that the task ID can be set before the logger is created."""
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
+    )
+    self.assertEqual(logger._task_id, _TEST_TASK_ID)
+    logger.set_task_id(_TEST_TASK_ID_2)
+    self.assertEqual(logger._task_id, _TEST_TASK_ID_2)
+
+  def test_set_task_id_fails_during_episode(self):
+    """Tests that task ID cannot be set during an episode."""
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            image_observation_keys=[],
+            policy_extra_spec={},
+        )
+    )
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    logger.reset(initial_timestep)
+    self.assertTrue(logger._is_recording)
+
+    with self.assertRaisesRegex(
+        ValueError, "Logger is recording data. Cannot set task ID."
+    ):
+      logger.set_task_id(_TEST_TASK_ID_2)
+
+    logger.write()
+    logger.stop()
+
+  def test_timestamp_key_is_set_correctly_in_observation_dictionary_and_session_metadata(
+      self,
+  ):
+    timestamp_key = "timestamp_ns"
+    expected_timestamps = [
+        np.array(i) for i in range(_DEFAULT_NUMBER_STEPS + 1)
+    ]
+
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+            timestamp_key: specs.Array(shape=(), dtype=np.int64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+            timestamp_key=timestamp_key,
+        )
+    )
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    initial_timestep.observation[timestamp_key] = expected_timestamps[0]
+    logger.reset(initial_timestep)
+
+    for idx in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      next_timestep.observation[timestamp_key] = expected_timestamps[idx + 1]
+      action = specs_utils.valid_value_for_spec(action_spec)
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    logger.write()
+    logger.stop()
+
+    # Check that each timestep has the timestep key
+    mcap_proto_data = mcap_parser_utils.read_proto_data(
+        self._episode_path.full_path,
+        constants.TIMESTEP_TOPIC_NAME,
+        constants.ACTION_TOPIC_NAME,
+        constants.POLICY_EXTRA_TOPIC_NAME,
+    )
+    timesteps_examples = mcap_proto_data.timesteps
+    actions_examples = mcap_proto_data.actions
+    policy_extras_examples = mcap_proto_data.policy_extra
+
+    timesteps, _, _ = mcap_parser_utils.parse_examples_to_dm_env_types(
+        timestep_spec,
+        action_spec,
+        {},
+        timesteps_examples,
+        actions_examples,
+        policy_extras_examples,
+        constants.STEP_TYPE_KEY,
+        constants.OBSERVATION_KEY_PREFIX,
+        constants.REWARD_KEY,
+        constants.DISCOUNT_KEY,
+        constants.ACTION_KEY_PREFIX,
+        constants.POLICY_EXTRA_PREFIX,
+    )
+
+    for idx, timestep in enumerate(timesteps):
+      # Check that the timestamp key is in the mcap timestep observations dicts.
+      self.assertIn(timestamp_key, timestep.observation)
+      # Check that the timestamp key has the expected value.
+      np.testing.assert_equal(
+          timestep.observation[timestamp_key], expected_timestamps[idx]
+      )
+
+    # Check that the session metadata has the correct timestamps.
+    sessions = mcap_parser_utils.read_session_proto_data(
+        self._episode_path.full_path, constants.SESSION_TOPIC_NAME
+    )
+    self.assertLen(sessions, 1)
+    session = sessions[0]
+
+    self.assertEqual(session.interval.start_nsec, expected_timestamps[0].item())
+    self.assertGreaterEqual(
+        session.interval.stop_nsec, expected_timestamps[-1].item()
+    )
+
+  def test_dynamic_tags_set_correctly_in_session(self):
+    """Tests that dynamic tags are set correctly in the session."""
+
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+            # Test with multiple dynamic tagger to ensure that the returned tags
+            # lists are correctly merged.
+            metadata_config=episodic_logger.EpisodeMetadataConfig(
+                dynamic_episode_taggers=[
+                    lambda: ["tag1", "tag2"],
+                    lambda: ["tag3", "tag4"],
+                ],
+            ),
+        )
+    )
+
+    initial_timestep = self._generate_timestep(
+        timestep_spec, dm_env.StepType.FIRST
+    )
+    logger.reset(initial_timestep)
+
+    for _ in range(_DEFAULT_NUMBER_STEPS):
+      next_timestep = self._generate_timestep(
+          timestep_spec, dm_env.StepType.MID
+      )
+      action = specs_utils.valid_value_for_spec(action_spec)
+
+      policy_extra = {}
+      logger.record_action_and_next_timestep(
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+      )
+
+    logger.write()
+    logger.stop()
+
+    sessions = mcap_parser_utils.read_session_proto_data(
+        self._episode_path.full_path, constants.SESSION_TOPIC_NAME
+    )
+    # There should only be one session for a single episode.
+    self.assertLen(sessions, 1)
+    session = sessions[0]
+    self.assertSequenceEqual(session.tags, ["tag1", "tag2", "tag3", "tag4"])
 
   def _generate_timestep(
       self, timestep_spec: gdmr_types.TimeStepSpec, step_type: dm_env.StepType
@@ -2116,250 +2999,6 @@ class EpisodicLoggerTest(parameterized.TestCase):
         np.testing.assert_allclose(
             timestep.observation[key], expected_timestep.observation[key]
         )
-
-  def test_camera_image_encoding_and_byte_handling(self):
-    """Tests JPEG encoding for cameras and raw bytes for other arrays."""
-    # Define all potential camera keys for spec and original_arrays
-    obs_spec_dict = {
-        "instruction": specs.StringArray(shape=(), name="instruction"),
-        "rgb_cam": specs.Array(shape=(2, 2, 3), dtype=np.uint8),
-        "rgba_cam": specs.Array(shape=(2, 2, 4), dtype=np.uint8),
-        "gray_u8_cam": specs.Array(shape=(2, 2), dtype=np.uint8),
-        "gray_u16_cam": specs.Array(shape=(2, 2), dtype=np.uint16),
-        "non_cam_u8_array": specs.Array(shape=(2, 2, 3), dtype=np.uint8),
-        "non_cam_u16_array": specs.Array(shape=(2, 2), dtype=np.uint16),
-        "float_array": specs.Array(shape=(3,), dtype=np.float32),
-    }
-    timestep_spec = gdmr_types.TimeStepSpec(
-        step_type=gdmr_types.STEP_TYPE_SPEC,
-        reward=specs.Array(shape=(), dtype=np.float32),
-        discount=specs.Array(shape=(), dtype=np.float32),
-        observation=obs_spec_dict,
-    )
-    action_spec = specs.BoundedArray(
-        shape=(), dtype=np.float32, minimum=-np.inf, maximum=np.inf
-    )
-
-    original_arrays = {
-        "instruction": np.array("instruction", dtype=object),
-        "rgb_cam": np.array(
-            [[[10, 20, 30], [40, 50, 60]], [[70, 80, 90], [100, 110, 120]]],
-            dtype=np.uint8,
-        ),
-        "rgba_cam": np.array(
-            [
-                [[10, 20, 30, 255], [40, 50, 60, 255]],
-                [[70, 80, 90, 255], [100, 110, 120, 255]],
-            ],
-            dtype=np.uint8,
-        ),
-        "gray_u8_cam": np.array([[10, 20], [30, 40]], dtype=np.uint8),
-        "gray_u16_cam": np.array(
-            [[1000, 2000], [3000, 4000]],
-            dtype=np.uint16,
-        ),
-        "non_cam_u8_array": np.array(
-            [[[1, 2, 3], [4, 5, 6]], [[7, 8, 9], [10, 11, 12]]],
-            dtype=np.uint8,
-        ),
-        "non_cam_u16_array": np.array(
-            [[100, 200], [300, 400]], dtype=np.uint16
-        ),
-        "float_array": np.array([0.1, 0.2, 0.3], dtype=np.float32),
-    }
-
-    # image_observation_keys for the logger: only types directly saveable as
-    # JPEG by Pillow without conversion by the logger itself.
-    logger_image_observation_keys = ["rgb_cam", "gray_u8_cam"]
-
-    logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        action_spec=action_spec,
-        image_observation_keys=logger_image_observation_keys,
-        timestep_spec=timestep_spec,
-        proprioceptive_observation_keys=["float_array"],
-        policy_extra_spec={},
-    )
-
-    initial_timestep = dm_env.TimeStep(
-        step_type=dm_env.StepType.FIRST,
-        reward=np.array(0.0, dtype=np.float32),
-        discount=np.array(1.0, dtype=np.float32),
-        observation=original_arrays,
-    )
-    logger.reset(initial_timestep)
-    last_timestep = dm_env.TimeStep(
-        step_type=dm_env.StepType.LAST,
-        reward=np.array(0.0, dtype=np.float32),
-        discount=np.array(0.0, dtype=np.float32),
-        observation=original_arrays,
-    )
-    logger.record_action_and_next_timestep(
-        action=np.array(0.0, dtype=np.float32),
-        next_timestep=last_timestep,
-        policy_extra={},
-    )
-    logger.write()
-
-    mcap_proto_data = mcap_parser_utils.read_proto_data(
-        self._episode_path.full_path,
-        constants.TIMESTEP_TOPIC_NAME,
-        constants.ACTION_TOPIC_NAME,
-        constants.POLICY_EXTRA_TOPIC_NAME,
-    )
-    timesteps_examples = mcap_proto_data.timesteps
-
-    self.assertLen(timesteps_examples, 2)
-    features = timesteps_examples[0].features.feature
-    obs_prefix = constants.OBSERVATION_KEY_PREFIX
-
-    # Test JPEG encoded camera observations
-    # These are keys listed in logger_image_observation_keys and are expected
-    # to be JPEGs.
-    for key, arr in [
-        ("rgb_cam", original_arrays["rgb_cam"]),
-        ("gray_u8_cam", original_arrays["gray_u8_cam"]),
-    ]:
-      img = Image.fromarray(arr)
-      if img.mode == "RGBA":  # JPEG doesn't support alpha
-        img = img.convert("RGB")
-      if img.mode == "I;16":  # Convert 16-bit grayscale to 8-bit for JPEG
-        img = img.convert("L")
-
-      with io.BytesIO() as output_stream:
-        img.save(output_stream, format="JPEG")
-        expected_jpeg_bytes = output_stream.getvalue()
-      feature_key = f"{obs_prefix}/{key}"
-      self.assertEqual(
-          features[feature_key].bytes_list.value[0], expected_jpeg_bytes
-      )
-
-    # Test uint8/uint16 arrays not in logger_image_observation_keys, or those
-    # that would fail direct JPEG conversion, are stored as raw bytes.
-    for key, arr in [
-        (
-            "rgba_cam",
-            original_arrays["rgba_cam"],
-        ),  # Not in logger_image_observation_keys for this test
-        (
-            "gray_u16_cam",
-            original_arrays["gray_u16_cam"],
-        ),  # Not in logger_image_observation_keys for this test
-        ("non_cam_u8_array", original_arrays["non_cam_u8_array"]),
-        ("non_cam_u16_array", original_arrays["non_cam_u16_array"]),
-    ]:
-      feature_key = f"{obs_prefix}/{key}"
-      self.assertEqual(features[feature_key].bytes_list.value[0], arr.tobytes())
-
-    # Test other data types (e.g., float)
-    arr_float = original_arrays["float_array"]
-    feature_key_float = f"{obs_prefix}/float_array"
-    np.testing.assert_allclose(
-        features[feature_key_float].float_list.value, arr_float.flatten()
-    )
-
-  @parameterized.named_parameters(
-      dict(
-          testcase_name="3d_uint16_camera_array",
-          obs_key="cam2",
-          array_data=np.array(
-              [[[100, 200, 300], [400, 500, 600]]], dtype=np.uint16
-          ),
-          array_spec=specs.Array(shape=(1, 2, 3), dtype=np.uint16),
-          expected_exception=TypeError,  # Pillow Image.fromarray fails
-      ),
-      dict(
-          testcase_name="rgba_camera_direct_jpeg_save_fails_with_oserror",
-          obs_key="rgba_cam_direct_save",
-          array_data=np.array(
-              [
-                  [[10, 20, 30, 255], [40, 50, 60, 255]],
-                  [[70, 80, 90, 255], [100, 110, 120, 255]],
-              ],
-              dtype=np.uint8,
-          ),
-          array_spec=specs.Array(shape=(2, 2, 4), dtype=np.uint8),
-          expected_exception=OSError,  # Pillow img.save fails for RGBA as JPEG
-      ),
-      dict(
-          testcase_name="gray_u16_camera_direct_jpeg_save_fails_with_oserror",
-          obs_key="gray_u16_cam_direct_save",
-          array_data=np.array([[1000, 2000], [3000, 4000]], dtype=np.uint16),
-          array_spec=specs.Array(shape=(2, 2), dtype=np.uint16),
-          expected_exception=OSError,  # Pillow img.save fails for I;16 as JPEG
-      ),
-  )
-  def test_camera_encoding_fails_for_invalid_image_data(
-      self, obs_key, array_data, array_spec, expected_exception
-  ):
-    """Tests that encoding fails for invalid camera data shapes/types."""
-    image_observation_keys = [obs_key]
-    timestep_spec = gdmr_types.TimeStepSpec(
-        step_type=gdmr_types.STEP_TYPE_SPEC,
-        reward=specs.Array(shape=(), dtype=np.float32),
-        discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
-            "instruction": specs.StringArray(shape=(), name="instruction"),
-            obs_key: array_spec,
-            _TEST_PROPRIO_KEY: specs.Array(shape=(5,), dtype=np.float32),
-        },
-    )
-    action_spec = specs.BoundedArray(
-        shape=(), dtype=np.float32, minimum=-np.inf, maximum=np.inf
-    )
-
-    logger = episodic_logger.EpisodicLogger.create(
-        agent_id=_TEST_AGENT_ID,
-        task_id=_TEST_TASK_ID,
-        output_directory=self._episode_path.full_path,
-        image_observation_keys=image_observation_keys,
-        action_spec=action_spec,
-        proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-        timestep_spec=timestep_spec,
-        policy_extra_spec={},
-    )
-
-    initial_timestep = dm_env.TimeStep(
-        step_type=dm_env.StepType.FIRST,
-        reward=np.float32(0.0),
-        discount=np.float32(1.0),
-        observation={
-            "instruction": np.array("instruction", dtype=object),
-            obs_key: array_data,
-            _TEST_PROPRIO_KEY: np.zeros((5,), dtype=np.float32),
-        },
-    )
-    logger.reset(initial_timestep)
-
-    # Add one more step to have something to write
-    next_timestep = dm_env.TimeStep(
-        step_type=dm_env.StepType.LAST,
-        reward=np.float32(0.0),
-        discount=np.float32(0.0),
-        observation={
-            "instruction": np.array("instruction", dtype=object),
-            obs_key: array_data,
-            _TEST_PROPRIO_KEY: np.zeros((5,), dtype=np.float32),
-        },
-    )
-    logger.record_action_and_next_timestep(
-        action=np.array(0.0, dtype=np.float32),
-        next_timestep=next_timestep,
-        policy_extra={},
-    )
-
-    with self.assertRaises(expected_exception):
-      logger.write()
-
-
-def _encode_to_jpeg(array: np.ndarray) -> bytes:
-  img = Image.fromarray(array)
-  with io.BytesIO() as output_stream:
-    img.save(output_stream, format="JPEG")
-    expected_jpeg_bytes = output_stream.getvalue()
-  return expected_jpeg_bytes
 
 
 if __name__ == "__main__":

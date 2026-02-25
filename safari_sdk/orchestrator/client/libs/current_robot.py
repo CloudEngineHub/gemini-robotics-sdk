@@ -40,11 +40,14 @@ class OrchestratorCurrentRobotInfo:
   """Current robot info API client for interacting with orchestrator server."""
 
   def __init__(
-      self, *, connection: discovery.Resource, robot_id: str
+      self, *, connection: discovery.Resource,
+      robot_id: str,
+      hostname: str | None = None,
   ):
     """Initializes the robot job handler."""
     self._connection = connection
     self._robot_id = robot_id
+    self._hostname = hostname
 
   def disconnect(self) -> None:
     """Clears current connection to the orchestrator server."""
@@ -56,9 +59,15 @@ class OrchestratorCurrentRobotInfo:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
-    body = {"robot_id": self._robot_id, "tracer": time.time_ns()}
+    if not self._robot_id and self._hostname:
+      body = {
+          "robot_id": "request_robot_id_look_up",
+          "hostname": self._hostname,
+          "tracer": time.time_ns(),
+      }
+    else:
+      body = {"robot_id": self._robot_id, "tracer": time.time_ns()}
 
-    # assert server_connection_response.server_connection is not None
     try:
       response = (
           self._connection.orchestrator().currentRobotInfo(body=body).execute()
@@ -73,6 +82,9 @@ class OrchestratorCurrentRobotInfo:
 
     as_json = json.dumps(response)
     info = current_robot_info.CurrentRobotInfoResponse.from_json(as_json)
+
+    if not self._robot_id:
+      self._robot_id = info.robotId
 
     return _RESPONSE(
         success=True,

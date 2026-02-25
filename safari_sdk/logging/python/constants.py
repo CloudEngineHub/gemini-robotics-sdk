@@ -38,3 +38,11 @@ ACTION_KEY_TEMPLATE = 'action/{}'
 REWARD_KEY_TEMPLATE = 'reward/{}'
 DISCOUNT_KEY_TEMPLATE = 'discount/{}'
 POLICY_EXTRA_KEY_TEMPLATE = 'extra/policy_extra/{}'
+
+# Prefix for the mcap file name.
+MCAP_FILE_NAME_PREFIX = 'episode'
+
+# Minimum batch size for the episodic logger.
+MIN_BATCH_SIZE = 2
+# Default number of workers for the thread pool log writer.
+DEFAULT_NUM_WORKERS = 3

@@ -79,6 +79,7 @@ class SceneDescriptionTool(tool.Tool):
             ),
         ),
         print_raw_response=False,
+        tool_name="SceneDescriptionTool",
     )
     # Subscribe to the model input image events.
     self._image_buffer = image_buffer.ImageBuffer(

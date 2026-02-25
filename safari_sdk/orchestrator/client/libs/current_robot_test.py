@@ -24,7 +24,7 @@ from safari_sdk.orchestrator.client.libs import current_robot
 
 class CurrentRobotTest(absltest.TestCase):
 
-  def test_get_current_robot_info_good(self):
+  def test_get_current_robot_info_with_robot_id_good(self):
 
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().currentRobotInfo().execute.return_value = {
@@ -39,6 +39,47 @@ class CurrentRobotTest(absltest.TestCase):
     current_robot_lib = current_robot.OrchestratorCurrentRobotInfo(
         connection=mock_connection,
         robot_id="test_robot_id",
+    )
+    response = current_robot_lib.get_current_robot_info()
+    self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
+    self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.work_unit_id, "test_work_unit_id")
+    self.assertEqual(
+        response.work_unit_stage,
+        current_robot.current_robot_info.work_unit.WorkUnitStage.WORK_UNIT_STAGE_QUEUED_TO_ROBOT,
+    )
+    self.assertEqual(response.operator_id, "test_operator_id")
+    self.assertTrue(response.is_operational)
+
+    mock_connection.orchestrator().currentRobotInfo().execute.return_value = {
+        "robotId": "test_robot_id",
+        "isOperational": False,
+        "operatorId": "test_operator_id",
+        "robotJobId": "test_robot_job_id",
+        "workUnitId": "test_work_unit_id",
+        "stage": "WORK_UNIT_STAGE_QUEUED_TO_ROBOT",
+    }
+    response = current_robot_lib.get_current_robot_info()
+    self.assertTrue(response.success)
+    self.assertFalse(response.is_operational)
+
+  def test_get_current_robot_info_with_hostname_good(self):
+
+    mock_connection = mock.MagicMock()
+    mock_connection.orchestrator().currentRobotInfo().execute.return_value = {
+        "robotId": "test_robot_id",
+        "isOperational": True,
+        "operatorId": "test_operator_id",
+        "robotJobId": "test_robot_job_id",
+        "workUnitId": "test_work_unit_id",
+        "stage": "WORK_UNIT_STAGE_QUEUED_TO_ROBOT",
+    }
+
+    current_robot_lib = current_robot.OrchestratorCurrentRobotInfo(
+        connection=mock_connection,
+        robot_id="",
+        hostname="test_hostname",
     )
     response = current_robot_lib.get_current_robot_info()
     self.assertTrue(response.success)

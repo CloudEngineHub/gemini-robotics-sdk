@@ -25,6 +25,7 @@ refer to the docstring of the helper file itself:
 
 from collections.abc import Sequence
 import dataclasses
+import random
 import time
 
 from absl import app
@@ -176,7 +177,108 @@ def _print_orchestrator_work_unit_info(
         print(" Parameters:")
         for p_key, p_value in policy_params.items():
           print(f"   {p_key}: {p_value}")
+      print("")
+
+    questions = work_unit_context.questions
+    if questions is not None:
+      for q in questions:
+        print(" Questionnaire:")
+        print(f"   Questionnaire ID: {q.questionnaireId}")
+        print(f"   Question: {q.question}")
+        print(f"   When to ask: {q.whenToAsk}")
+        print(f"   Answer format: {q.answerFormat}")
+        print(f"   Allowed answers: {q.allowedAnswers}")
+      print("")
+
   print(" ----------------------------------------------------------------\n")
+
+
+def _should_ask_question(
+    conditions: list[orchestrator_helper.QUESTION_CONDITION],
+    episode_outcome: orchestrator_helper.WORK_UNIT_OUTCOME,
+    estop_pressed: bool,
+) -> bool:
+  """Checks if the question should be asked."""
+  cond = orchestrator_helper.QUESTION_CONDITION
+  outcome = orchestrator_helper.WORK_UNIT_OUTCOME
+  for condition in conditions:
+    match condition:
+      case cond.QUESTION_CONDITION_ALWAYS:
+        return True
+      case cond.QUESTION_CONDITION_ONLY_SUCCESS_EPISODE:
+        if episode_outcome == outcome.WORK_UNIT_OUTCOME_SUCCESS:
+          return True
+      case cond.QUESTION_CONDITION_ONLY_FAILED_EPISODE:
+        if episode_outcome == outcome.WORK_UNIT_OUTCOME_FAILURE:
+          return True
+      case cond.QUESTION_CONDITION_ONLY_INVALID_EPISODE:
+        if episode_outcome == outcome.WORK_UNIT_OUTCOME_INVALID:
+          return True
+      case cond.QUESTION_CONDITION_ESTOP_PRESSED:
+        if estop_pressed:
+          return True
+      case cond.QUESTION_CONDITION_ESTOP_NOT_PRESSED:
+        if not estop_pressed:
+          return True
+      case _:
+        continue
+
+  return False
+
+
+def _mock_answer_question(
+    question: str,
+    answer_type: orchestrator_helper.QUESTION_ANSWER_TYPE,
+    allowed_answers: list[str],
+) -> list[str]:
+  """Mocks answering a question."""
+
+  print(f" - Question: {question} -\n")
+
+  print("[Sleeping for 3 seconds to simulate answering the question]\n")
+  time.sleep(3)
+
+  at = orchestrator_helper.QUESTION_ANSWER_TYPE
+  match answer_type:
+    case at.ANSWER_TYPE_OPEN_ENDED:
+      answer = ["This is an open ended answer by the mock user."]
+    case at.ANSWER_TYPE_SINGLE_CHOICE:
+      answer = [random.choice(allowed_answers)]
+    case at.ANSWER_TYPE_MULTIPLE_CHOICE:
+      random_answers = []
+      for _ in range(len(allowed_answers)):
+        random_answers.append(random.choice(allowed_answers))
+      answer = list(set(random_answers))
+    case at.ANSWER_TYPE_TRUE_FALSE:
+      answer = [random.choice(allowed_answers)]
+    case at.ANSWER_TYPE_YES_NO:
+      answer = [random.choice(allowed_answers)]
+    case _:
+      answer = [f"Invalid answer type: {answer_type.name}"]
+
+  print(f" - Mocking user's answer as: {answer} -\n")
+  return answer
+
+
+def _answer_questionnaire(
+    question: orchestrator_helper.WORK_UNIT_QUESTION,
+    episode_outcome: orchestrator_helper.WORK_UNIT_OUTCOME,
+    estop_pressed: bool,
+) -> orchestrator_helper.WORK_UNIT_QUESTION:
+  """Mocks handling answering a questionnaire."""
+  if _should_ask_question(
+      conditions=question.whenToAsk,
+      episode_outcome=episode_outcome,
+      estop_pressed=estop_pressed
+  ):
+    question.userAnswers = _mock_answer_question(
+        question=question.question,
+        answer_type=question.answerFormat,
+        allowed_answers=question.allowedAnswers,
+    )
+    question.wasDisplayed = True
+
+  return question
 
 
 def run_mock_eval_loop(params: EvalPolicyParams) -> None:
@@ -192,17 +294,22 @@ def run_mock_eval_loop(params: EvalPolicyParams) -> None:
     print(current_work_unit_msg)
 
     response = params.orchestrator_client.request_work_unit()
-    if response.success:
-      if response.no_more_robot_job:
-        print(" - No robot job available -\n")
-        break
-      if response.no_more_work_unit:
-        print(" - No work unit available -\n")
-        break
-      print(" - Sucessfully requested work unit -\n")
-    else:
+    if not response.success:
       print(f"\n - ERROR: {response.error_message} -\n")
       break
+    if response.no_more_robot_job:
+      print(" - No robot job available -\n")
+      break
+    if response.no_more_work_unit:
+      print(" - No work unit available -\n")
+      break
+    print(" - Sucessfully requested work unit -\n")
+
+    if response.launch_command:
+      print(
+          "\n - Robot Job contains launch command information -\n"
+          f"{response.launch_command}\n"
+      )
 
     response = params.orchestrator_client.get_current_work_unit()
     if not response.success:
@@ -337,6 +444,7 @@ def run_mock_eval_loop(params: EvalPolicyParams) -> None:
     time.sleep(1)
 
     print(" - Starting episode execution for current work unit -\n")
+    session_start_time_ns = time.time_ns()
     response = params.orchestrator_client.start_work_unit_execution()
     if not response.success:
       print(f"\n - ERROR: {response.error_message} -\n")
@@ -345,12 +453,36 @@ def run_mock_eval_loop(params: EvalPolicyParams) -> None:
     print("[Sleeping for 3 seconds to simulate episode execution]\n")
     time.sleep(3)
 
+    print(" - Ending episode execution as successful-\n")
+    session_end_time_ns = time.time_ns()
+    outcome = orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS
+
+    print(" - Checking for post-episode questionnaires -\n")
+    if work_unit.context.questions:
+      print(" - Found post-episode questionnaires -\n")
+      response_to_questions = []
+      for question in work_unit.context.questions:
+        response_to_questions.append(
+            _answer_questionnaire(
+                question=question,
+                episode_outcome=outcome,
+                estop_pressed=False,
+            )
+        )
+    else:
+      print(" - No post-episode questionnaires found -\n")
+      response_to_questions = None
+
     print(" - Marking current work unit as completed -\n")
     response = params.orchestrator_client.complete_work_unit(
-        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        outcome=outcome,
         success_score=0.5,
         success_score_definition="Mock score from SDK example code.",
         note="This is a mock episode from SDK example code.",
+        session_start_time_ns=session_start_time_ns,
+        session_end_time_ns=session_end_time_ns,
+        session_log_type="sdk_example",
+        response_to_questions=response_to_questions,
     )
     if not response.success:
       print(f"\n - ERROR: {response.error_message} -\n")

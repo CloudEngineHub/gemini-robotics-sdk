@@ -1,0 +1,1352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gemini Robotics Agent UI</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
+
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-tertiary: #1a1a25;
+      --accent-cyan: #00f0ff;
+      --accent-purple: #b026ff;
+      --accent-pink: #ff2d92;
+      --text-primary: #e0e8f0;
+      --text-secondary: #8090a0;
+      --border-glow: rgba(0, 240, 255, 0.3);
+      --shadow-glow: 0 0 20px rgba(0, 240, 255, 0.15);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Google Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg-primary);
+      background-image:
+        radial-gradient(ellipse at top left, rgba(176, 38, 255, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at bottom right, rgba(0, 240, 255, 0.08) 0%, transparent 50%);
+      color: var(--text-primary);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 24px;
+      background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+      border-bottom: 1px solid var(--border-glow);
+      box-shadow: var(--shadow-glow);
+    }
+
+    header .left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 500;
+      background: linear-gradient(90deg, var(--accent-cyan), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      letter-spacing: 1px;
+    }
+
+    .menu-btn {
+      background: transparent;
+      border: 1px solid var(--border-glow);
+      color: var(--accent-cyan);
+      font-size: 1.3rem;
+      cursor: pointer;
+      padding: 8px 12px;
+      border-radius: 4px;
+      transition: all 0.3s ease;
+    }
+
+    .menu-btn:hover {
+      background: rgba(0, 240, 255, 0.1);
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .image-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+      min-width: 300px;
+    }
+
+    .image-toolbar {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      font-family: 'Rajdhani', sans-serif;
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(176, 38, 255, 0.1) 100%);
+      border: 1px solid var(--border-glow);
+      color: var(--accent-cyan);
+      padding: 8px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: all 0.3s ease;
+    }
+
+    .btn:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(176, 38, 255, 0.2) 100%);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .image-display {
+      flex: 1;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+      box-shadow: inset 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+
+    .image-display::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent);
+      opacity: 0.5;
+    }
+
+    .image-display img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    .image-display .placeholder {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+    }
+
+    .override-bar {
+      margin-top: 12px;
+    }
+
+    .resizer {
+      width: 6px;
+      background: linear-gradient(180deg, var(--accent-cyan) 0%, var(--accent-purple) 100%);
+      cursor: col-resize;
+      opacity: 0.3;
+      transition: opacity 0.3s ease;
+      position: relative;
+    }
+
+    .resizer:hover, .resizer.active {
+      opacity: 0.8;
+    }
+
+    .resizer::before {
+      content: '⋮';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .events-panel {
+      width: 33%;
+      min-width: 300px;
+      display: flex;
+      flex-direction: column;
+      padding: 16px;
+    }
+
+    .events-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+
+    .events-header h2 {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--accent-cyan);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .filter-container {
+      position: relative;
+    }
+
+    .filter-dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      right: 0;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      padding: 12px;
+      z-index: 100;
+      max-height: 350px;
+      overflow-y: auto;
+      min-width: 280px;
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), var(--shadow-glow);
+    }
+
+    .filter-dropdown.show {
+      display: block;
+    }
+
+    .filter-dropdown label {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      transition: color 0.2s ease;
+    }
+
+    .filter-dropdown label:hover {
+      color: var(--accent-cyan);
+    }
+
+    .filter-dropdown input[type="checkbox"] {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 1px solid var(--border-glow);
+      border-radius: 3px;
+      cursor: pointer;
+      position: relative;
+      background: transparent;
+    }
+
+    .filter-dropdown input[type="checkbox"]:checked {
+      background: var(--accent-cyan);
+      border-color: var(--accent-cyan);
+    }
+
+    .filter-dropdown input[type="checkbox"]:checked::after {
+      content: '✓';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: var(--bg-primary);
+      font-size: 11px;
+    }
+
+    .filter-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--border-glow);
+    }
+
+    .events-log {
+      flex: 1;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-glow);
+      border-radius: 8px;
+      padding: 12px;
+      overflow-y: auto;
+      font-family: 'Google Sans', monospace;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.3);
+    }
+
+    .event-item {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+    }
+
+    .event-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+    }
+
+    .event-caret {
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      transition: transform 0.2s ease;
+      user-select: none;
+    }
+
+    .event-item.expanded .event-caret {
+      transform: rotate(90deg);
+    }
+
+    .event-time {
+      color: var(--text-secondary);
+      font-size: 0.7rem;
+      margin-left: auto;
+    }
+
+    .event-type {
+      color: var(--accent-cyan);
+      font-weight: 600;
+      font-size: 0.8rem;
+    }
+
+    .event-source {
+      color: var(--accent-purple);
+      font-size: 0.8rem;
+    }
+
+    .event-summary {
+      color: var(--text-primary);
+      margin-top: 4px;
+      font-size: 0.85rem;
+    }
+
+    .event-details {
+      display: none;
+      color: var(--text-secondary);
+      word-break: break-word;
+      margin-top: 8px;
+      padding: 8px;
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
+      font-size: 0.8rem;
+      white-space: pre-wrap;
+    }
+
+    .event-item.expanded .event-details {
+      display: block;
+    }
+
+    .event-data {
+      color: var(--text-secondary);
+      word-break: break-word;
+      margin-top: 4px;
+    }
+
+    .event-item.event-tall .event-summary {
+      max-height: none;
+      white-space: pre-wrap;
+    }
+
+    .type-SUCCESS_SIGNAL { color: #00FF7F; }
+
+    .type-MODEL_TEXT_INPUT { color: #00CED1; }
+    .type-TOOL_CALL { color: #32CD32; }
+    .type-TOOL_RESULT { color: #FFD700; }
+    .type-TOOL_CALL_CANCELLATION { color: #FF6B6B; }
+    .type-DEBUG { color: #FF6B6B; }
+    .type-MODEL_TURN { color: #6495ED; }
+    .type-INPUT_TRANSCRIPT { color: #BA55D3; }
+    .type-OUTPUT_TRANSCRIPT { color: #20B2AA; }
+    .type-GO_AWAY { color: #FF8C00; }
+    .type-GENERATION_COMPLETE { color: #9370DB; }
+    .type-MODEL_TURN_COMPLETE { color: #9370DB; }
+    .type-MODEL_TURN_INTERRUPTED { color: #FF4500; }
+    .type-SYSTEM_LOG { color: #FFA500; }
+    .type-LOG_INFO { color: #87CEEB; }
+    .type-LOG_WARNING { color: #FFD700; }
+    .type-LOG_ERROR { color: #FF6347; }
+    .type-default { color: #aaa; }
+
+    .input-container {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    .input-container input[type="text"] {
+      flex: 1;
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-glow);
+      border-radius: 6px;
+      padding: 12px 16px;
+      color: var(--text-primary);
+      font-family: 'Rajdhani', sans-serif;
+      font-size: 1rem;
+      transition: all 0.3s ease;
+    }
+
+    .input-container input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+    }
+
+    .input-container input[type="text"]::placeholder {
+      color: var(--text-secondary);
+    }
+
+    .icon-btn {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.1) 0%, rgba(176, 38, 255, 0.1) 100%);
+      border: 1px solid var(--border-glow);
+      color: var(--accent-cyan);
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      transition: all 0.3s ease;
+    }
+
+    .icon-btn:hover {
+      background: linear-gradient(135deg, rgba(0, 240, 255, 0.2) 0%, rgba(176, 38, 255, 0.2) 100%);
+      box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);
+    }
+
+    .status-bar {
+      padding: 8px 16px;
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-glow);
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-cyan);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-primary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-glow);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent-cyan);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="left">
+      <button class="menu-btn" title="Menu">☰</button>
+      <h1>Gemini Robotics Agent UI</h1>
+    </div>
+    <button class="menu-btn" title="More options">⋮</button>
+  </header>
+
+  <div class="main-container">
+    <div class="image-panel" id="imagePanel">
+      <div class="image-toolbar">
+        <button class="btn" id="zoomBtn">Zoom</button>
+        <button class="btn" id="addViewBtn">Add View</button>
+      </div>
+      <div class="image-display" id="imageDisplay">
+        <span class="placeholder">● AWAITING SIGNAL ●</span>
+      </div>
+      <div class="override-bar">
+        <button class="btn" id="overridesBtn">Overrides</button>
+      </div>
+    </div>
+
+    <div class="resizer" id="resizer"></div>
+
+    <div class="events-panel" id="eventsPanel">
+      <div class="events-header">
+        <h2>◈ Events</h2>
+        <div class="filter-container">
+          <button class="btn" id="filterBtn">Filter</button>
+          <div class="filter-dropdown" id="filterDropdown"></div>
+        </div>
+      </div>
+      <div class="events-log" id="eventsLog"></div>
+      <div class="input-container">
+        <button class="icon-btn" id="addFileBtn" title="Add file">+</button>
+        <button class="icon-btn" id="micBtn" title="Voice input">🎤</button>
+        <input type="text" id="textInput" placeholder="Enter command...">
+        <button class="icon-btn" id="sendBtn" title="Send">↵</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <div class="status-indicator">
+      <span class="status-dot"></span>
+      <span id="statusBar">Initializing systems...</span>
+    </div>
+    <span id="timestamp"></span>
+  </div>
+
+  <script>
+    const EXTERNAL_CONTROLLER = 'http://localhost:8887';
+
+    const ALL_EVENT_TYPES = [
+      "SETUP_COMPLETE", "TOOL_CALL", "TOOL_CALL_CANCELLATION", "GO_AWAY",
+      "USAGE_METADATA", "SESSION_RESUMPTION_UPDATE", "MODEL_TURN",
+      "MODEL_TURN_COMPLETE", "MODEL_TURN_INTERRUPTED", "GROUNDING_METADATA",
+      "GENERATION_COMPLETE", "INPUT_TRANSCRIPT", "OUTPUT_TRANSCRIPT",
+      "URL_CONTEXT_METADATA", "TOOL_RESULT", "MODEL_AUDIO_INPUT",
+      "MODEL_IMAGE_INPUT", "MODEL_TEXT_INPUT", "DEBUG", "SUCCESS_SIGNAL",
+      "FRAMEWORK_STATUS", "LIVE_API_HEALTH", "GEMINI_CLIENT_HEALTH",
+      "RESET", "LOG_SESSION_METADATA", "REAL_TIME_IMAGE_SENT",
+      "REAL_TIME_AUDIO_SENT", "SYSTEM_LOG"
+    ];
+
+    const DEFAULT_EVENTS = [
+      "MODEL_TURN", "MODEL_TURN_COMPLETE", "MODEL_TURN_INTERRUPTED",
+      "MODEL_TEXT_INPUT", "GENERATION_COMPLETE", "TOOL_CALL",
+      "TOOL_CALL_CANCELLATION", "TOOL_RESULT", "GO_AWAY", "DEBUG",
+      "INPUT_TRANSCRIPT", "OUTPUT_TRANSCRIPT", "SYSTEM_LOG", "SUCCESS_SIGNAL"
+    ];
+
+    let allEventTypes = ALL_EVENT_TYPES;
+    let selectedEventTypes = new Set(DEFAULT_EVENTS);
+    let eventSource = null;
+    let imageEventSource = null;
+
+    // Audio configuration (matching backend: 16kHz input, 24kHz output)
+    const AUDIO_INPUT_RATE = 16000;
+    const AUDIO_OUTPUT_RATE = 24000;
+    const AUDIO_CHUNK_SIZE = 4096;
+
+    // Audio state
+    let audioContext = null;
+    let mediaStream = null;
+    let audioWorkletNode = null;
+    let isRecording = false;
+    let audioPlaybackQueue = [];
+    let isPlayingAudio = false;
+    let currentAudioSource = null;
+    let playbackContext = null;
+    let nextPlaybackTime = 0;
+    let audioEventSource = null;
+
+    // Transcript buffer for stitching OUTPUT_TRANSCRIPT fragments
+    const transcriptBuffer = {
+      buffer: [],
+      timeoutId: null,
+      flushTimeoutMs: 500,
+
+      append: function(text, finished) {
+        if (this.timeoutId) {
+          clearTimeout(this.timeoutId);
+          this.timeoutId = null;
+        }
+        if (text) {
+          this.buffer.push(text);
+        }
+        if (finished) {
+          this.flush();
+        } else {
+          this.timeoutId = setTimeout(() => this.flush(), this.flushTimeoutMs);
+        }
+      },
+
+      flush: function() {
+        if (this.timeoutId) {
+          clearTimeout(this.timeoutId);
+          this.timeoutId = null;
+        }
+        if (this.buffer.length > 0) {
+          const stitched = this.buffer.join('');
+          this.buffer = [];
+          addStitchedTranscriptToLog(stitched);
+        }
+      },
+
+      clear: function() {
+        if (this.timeoutId) {
+          clearTimeout(this.timeoutId);
+          this.timeoutId = null;
+        }
+        this.buffer = [];
+      }
+    };
+
+    async function init() {
+      setupFilterDropdown();
+      startEventStream();
+      startImageStream();
+      startAudioStream();
+      updateStatus('Systems online');
+      updateTimestamp();
+      setInterval(updateTimestamp, 1000);
+    }
+
+    function updateTimestamp() {
+      document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+    }
+
+    function setupFilterDropdown() {
+      const dropdown = document.getElementById('filterDropdown');
+      let html = '';
+      allEventTypes.forEach(et => {
+        const checked = selectedEventTypes.has(et) ? 'checked' : '';
+        html += `<label><input type="checkbox" value="${et}" ${checked} onchange="onFilterChange(this)"> ${et}</label>`;
+      });
+      html += `<div class="filter-actions">
+        <button class="btn" onclick="selectAllAndApply()">All</button>
+        <button class="btn" onclick="selectNoneAndApply()">None</button>
+      </div>`;
+      dropdown.innerHTML = html;
+    }
+
+    function onFilterChange(checkbox) {
+      if (checkbox.checked) {
+        selectedEventTypes.add(checkbox.value);
+      } else {
+        selectedEventTypes.delete(checkbox.value);
+      }
+      startEventStream();
+      filterExistingEvents();
+    }
+
+    function selectAllAndApply() {
+      document.querySelectorAll('#filterDropdown input[type="checkbox"]').forEach(cb => {
+        cb.checked = true;
+        selectedEventTypes.add(cb.value);
+      });
+      startEventStream();
+      filterExistingEvents();
+    }
+
+    function selectNoneAndApply() {
+      document.querySelectorAll('#filterDropdown input[type="checkbox"]').forEach(cb => {
+        cb.checked = false;
+      });
+      selectedEventTypes.clear();
+      startEventStream();
+      filterExistingEvents();
+    }
+
+    function filterExistingEvents() {
+      document.querySelectorAll('.event-item').forEach(item => {
+        const eventType = item.dataset.eventType;
+        if (eventType && !selectedEventTypes.has(eventType)) {
+          item.style.display = 'none';
+        } else {
+          item.style.display = '';
+        }
+      });
+    }
+
+
+    function startEventStream() {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+      if (selectedEventTypes.size === 0) {
+        updateStatus('No events selected');
+        return;
+      }
+      const params = Array.from(selectedEventTypes).map(t => 'event_types=' + t).join('&');
+      const url = EXTERNAL_CONTROLLER + '/stream_events/?' + params;
+      console.log('Starting event stream with URL:', url);
+      eventSource = new EventSource(url);
+      eventSource.onopen = () => {
+        console.log('Event stream connected');
+        updateStatus('Connected - streaming ' + selectedEventTypes.size + ' event types');
+      };
+      eventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        addEventToLog(data);
+      };
+      eventSource.onerror = (err) => {
+        console.error('Event stream error:', err);
+        updateStatus('Event stream error - retrying...');
+      };
+    }
+
+    function startImageStream() {
+      if (imageEventSource) {
+        imageEventSource.close();
+      }
+      const url = EXTERNAL_CONTROLLER + '/stream_events/?event_types=REAL_TIME_IMAGE_SENT';
+      imageEventSource = new EventSource(url);
+      imageEventSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        displayImage(data);
+      };
+    }
+
+    // =========================================================================
+    // Audio Recording (Microphone -> Agent)
+    // =========================================================================
+
+    async function startRecording() {
+      if (isRecording) return;
+
+      try {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)({
+          sampleRate: 48000
+        });
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000
+          }
+        });
+
+        const source = audioContext.createMediaStreamSource(mediaStream);
+        const processor = audioContext.createScriptProcessor(AUDIO_CHUNK_SIZE, 1, 1);
+
+        processor.onaudioprocess = (e) => {
+          if (!isRecording) return;
+          const inputData = e.inputBuffer.getChannelData(0);
+          const downsampled = downsampleTo16kHz(inputData, audioContext.sampleRate);
+          const pcmData = float32ToInt16(downsampled);
+          sendAudioToAgent(pcmData);
+        };
+
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+
+        isRecording = true;
+        updateMicButton(true);
+        updateStatus('Recording audio...');
+        console.log('Audio recording started');
+
+        // Interrupt any ongoing playback when user starts speaking
+        stopAudioPlayback();
+
+      } catch (err) {
+        console.error('Failed to start recording:', err);
+        updateStatus('Microphone access denied');
+      }
+    }
+
+    function stopRecording() {
+      if (!isRecording) return;
+
+      isRecording = false;
+
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+        mediaStream = null;
+      }
+
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close();
+        audioContext = null;
+      }
+
+      updateMicButton(false);
+      updateStatus('Recording stopped');
+      console.log('Audio recording stopped');
+    }
+
+    function toggleRecording() {
+      if (isRecording) {
+        stopRecording();
+      } else {
+        startRecording();
+      }
+    }
+
+    function downsampleTo16kHz(buffer, fromSampleRate) {
+      const ratio = fromSampleRate / AUDIO_INPUT_RATE;
+      const newLength = Math.floor(buffer.length / ratio);
+      const result = new Float32Array(newLength);
+      for (let i = 0; i < newLength; i++) {
+        result[i] = buffer[Math.floor(i * ratio)];
+      }
+      return result;
+    }
+
+    function float32ToInt16(float32Array) {
+      const int16Array = new Int16Array(float32Array.length);
+      for (let i = 0; i < float32Array.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32Array[i]));
+        int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return int16Array;
+    }
+
+    function sendAudioToAgent(pcmData) {
+      const bytes = new Uint8Array(pcmData.buffer);
+      const base64 = btoa(String.fromCharCode.apply(null, bytes));
+
+      fetch(EXTERNAL_CONTROLLER + '/publish_event/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'MODEL_AUDIO_INPUT',
+          source: 'USER',
+          data: base64,
+          metadata: {}
+        })
+      }).catch(() => {});
+    }
+
+    function updateMicButton(recording) {
+      const btn = document.getElementById('micBtn');
+      if (recording) {
+        btn.style.background = 'linear-gradient(135deg, rgba(255, 45, 146, 0.3) 0%, rgba(176, 38, 255, 0.3) 100%)';
+        btn.style.borderColor = 'var(--accent-pink)';
+        btn.innerHTML = '🔴';
+      } else {
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.innerHTML = '🎤';
+      }
+    }
+
+    // =========================================================================
+    // Audio Playback (Agent -> Speaker)
+    // =========================================================================
+
+    function startAudioStream() {
+      if (audioEventSource) {
+        audioEventSource.close();
+      }
+      const url = EXTERNAL_CONTROLLER + '/stream_events/?event_types=MODEL_TURN';
+      console.log('Starting audio stream with URL:', url);
+      audioEventSource = new EventSource(url);
+
+      audioEventSource.onopen = () => {
+        console.log('Audio stream connected successfully');
+      };
+
+      audioEventSource.onerror = (err) => {
+        console.error('Audio stream error:', err, 'readyState:', audioEventSource.readyState);
+      };
+
+      audioEventSource.onmessage = (event) => {
+        console.log('Received MODEL_TURN event, length:', event.data.length);
+        try {
+          const data = JSON.parse(event.data);
+          console.log('Parsed event, has audio field:', !!data.audio, 'has data:', !!data.data);
+          if (data.audio) {
+            console.log('Audio field present, has audio_base64:', !!data.audio.audio_base64);
+          }
+          processAudioFromEvent(data);
+        } catch (e) {
+          console.error('Error processing audio event:', e);
+        }
+      };
+      console.log('Audio stream started, awaiting connection...');
+    }
+
+    function processAudioFromEvent(eventData) {
+      // First, check if the external controller has already extracted audio
+      if (eventData.audio && eventData.audio.audio_base64) {
+        console.log('Using pre-extracted audio data, mime:', eventData.audio.mime_type);
+        try {
+          const binaryStr = atob(eventData.audio.audio_base64);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+          const int16Array = new Int16Array(bytes.buffer);
+          audioPlaybackQueue.push(int16Array);
+          console.log('Queued audio chunk, samples:', int16Array.length);
+
+          if (!isPlayingAudio) {
+            playNextAudioChunk();
+          }
+          return;
+        } catch (e) {
+          console.error('Error decoding pre-extracted audio:', e);
+        }
+      }
+
+      // Fall back to regex extraction for backwards compatibility
+      const dataStr = eventData.data;
+      if (!dataStr || typeof dataStr !== 'string') return;
+
+      // Check if this contains audio data (audio/pcm in inline_data)
+      if (!dataStr.includes('audio/pcm')) return;
+
+      console.log('Found audio/pcm event, attempting to extract...');
+
+      // Check if it's raw binary (escaped hex) - we can't decode this easily
+      if (dataStr.includes("\\x")) {
+        console.log('Audio data contains escaped hex bytes, cannot decode in browser');
+        return;
+      }
+
+      // Try to find base64 encoded audio data
+      let base64Audio = null;
+      const patterns = [
+        /data=b'([A-Za-z0-9+/=]{20,})'/,      // Python bytes with single quotes
+        /data=b"([A-Za-z0-9+/=]{20,})"/,      // Python bytes with double quotes
+        /inline_data[^}]*data['":\s]+b?'?([A-Za-z0-9+/=]{20,})'?/,  // More flexible pattern
+      ];
+
+      for (const pattern of patterns) {
+        const match = dataStr.match(pattern);
+        if (match && match[1]) {
+          base64Audio = match[1];
+          console.log('Matched audio with pattern:', pattern.toString(), 'length:', base64Audio.length);
+          break;
+        }
+      }
+
+      if (!base64Audio) {
+        console.log('Could not extract base64 audio from:', dataStr.substring(0, 200));
+        return;
+      }
+
+      try {
+        const binaryStr = atob(base64Audio);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) {
+          bytes[i] = binaryStr.charCodeAt(i);
+        }
+        const int16Array = new Int16Array(bytes.buffer);
+        audioPlaybackQueue.push(int16Array);
+        console.log('Queued audio chunk, samples:', int16Array.length);
+
+        if (!isPlayingAudio) {
+          playNextAudioChunk();
+        }
+      } catch (e) {
+        console.error('Error decoding audio:', e, 'base64 prefix:', base64Audio.substring(0, 50));
+      }
+    }
+
+    async function playNextAudioChunk() {
+      if (audioPlaybackQueue.length === 0) {
+        isPlayingAudio = false;
+        return;
+      }
+
+      isPlayingAudio = true;
+      const pcmData = audioPlaybackQueue.shift();
+
+      try {
+        if (!playbackContext || playbackContext.state === 'closed') {
+          playbackContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: AUDIO_OUTPUT_RATE
+          });
+          nextPlaybackTime = playbackContext.currentTime;
+        }
+
+        const float32Data = new Float32Array(pcmData.length);
+        for (let i = 0; i < pcmData.length; i++) {
+          float32Data[i] = pcmData[i] / (pcmData[i] < 0 ? 0x8000 : 0x7FFF);
+        }
+
+        const audioBuffer = playbackContext.createBuffer(1, float32Data.length, AUDIO_OUTPUT_RATE);
+        audioBuffer.getChannelData(0).set(float32Data);
+
+        const source = playbackContext.createBufferSource();
+        source.buffer = audioBuffer;
+        source.connect(playbackContext.destination);
+
+        currentAudioSource = source;
+
+        const startAt = Math.max(playbackContext.currentTime, nextPlaybackTime);
+        nextPlaybackTime = startAt + audioBuffer.duration;
+
+        source.onended = () => {
+          currentAudioSource = null;
+          playNextAudioChunk();
+        };
+
+        source.start(startAt);
+      } catch (e) {
+        console.error('Error playing audio:', e);
+        isPlayingAudio = false;
+      }
+    }
+
+    function stopAudioPlayback() {
+      audioPlaybackQueue = [];
+      if (currentAudioSource) {
+        try {
+          currentAudioSource.stop();
+        } catch (e) {}
+        currentAudioSource = null;
+      }
+      if (playbackContext && playbackContext.state !== 'closed') {
+        playbackContext.close();
+        playbackContext = null;
+      }
+      nextPlaybackTime = 0;
+      isPlayingAudio = false;
+    }
+
+    function displayImage(eventData) {
+      const container = document.getElementById('imageDisplay');
+      try {
+        const imgData = eventData.data;
+        if (imgData && imgData.startsWith && imgData.startsWith('data:image')) {
+          container.innerHTML = `<img src="${imgData}" alt="Live feed">`;
+        } else if (typeof imgData === 'string' && imgData.length > 100) {
+          container.innerHTML = `<img src="data:image/jpeg;base64,${imgData}" alt="Live feed">`;
+        }
+      } catch (e) {
+        console.error('Error displaying image:', e);
+      }
+    }
+
+    function getEventTypeClass(eventType) {
+      const knownTypes = ['MODEL_TEXT_INPUT', 'TOOL_CALL', 'TOOL_RESULT', 'TOOL_CALL_CANCELLATION', 'DEBUG', 'MODEL_TURN', 'INPUT_TRANSCRIPT', 'OUTPUT_TRANSCRIPT', 'GO_AWAY', 'GENERATION_COMPLETE', 'MODEL_TURN_COMPLETE', 'MODEL_TURN_INTERRUPTED'];
+      return knownTypes.includes(eventType) ? `type-${eventType}` : 'type-default';
+    }
+
+    function getTextFromParts(dataStr) {
+      if (!dataStr || typeof dataStr !== 'string') return dataStr;
+
+      var tripleQuote = String.fromCharCode(34, 34, 34);
+      var triplePrefix = 'text=' + tripleQuote;
+      var idx3 = dataStr.indexOf(triplePrefix);
+      if (idx3 !== -1) {
+        var start3 = idx3 + triplePrefix.length;
+        var end3 = dataStr.indexOf(tripleQuote, start3);
+        if (end3 > start3) {
+          return dataStr.substring(start3, end3).trim();
+        }
+      }
+
+      var idx1 = dataStr.indexOf("text='");
+      if (idx1 !== -1) {
+        var start1 = idx1 + 6;
+        var end1 = dataStr.indexOf("'", start1);
+        if (end1 > start1) {
+          return dataStr.substring(start1, end1);
+        }
+      }
+
+      var idx2 = dataStr.indexOf('text="');
+      if (idx2 !== -1) {
+        var start2 = idx2 + 6;
+        var end2 = dataStr.indexOf('"', start2);
+        if (end2 > start2) {
+          return dataStr.substring(start2, end2);
+        }
+      }
+
+      if (dataStr.indexOf('inline_data') !== -1) {
+        return '[Contains inline data]';
+      }
+      return dataStr;
+    }
+
+    function shouldFilterEvent(typeStr, dataStr) {
+      if (typeStr === 'GENERATION_COMPLETE' || typeStr === 'MODEL_TURN_COMPLETE') {
+        return true;
+      }
+      if (typeStr === 'MODEL_TURN') {
+        if (dataStr.includes('audio/pcm')) return true;
+        if (dataStr.includes('executable_code=')) return true;
+        if (dataStr.includes('code_execution_result=')) return true;
+        if (dataStr.includes('_CancelFunctionCall=')) return true;
+      }
+      if (typeStr === 'MODEL_IMAGE_INPUT') {
+        return true;
+      }
+      return false;
+    }
+
+    function formatTime(timestamp) {
+      if (!timestamp) return '';
+      const date = new Date(timestamp);
+      const hours = date.getHours().toString().padStart(2, '0');
+      const mins = date.getMinutes().toString().padStart(2, '0');
+      const secs = date.getSeconds().toString().padStart(2, '0');
+      const ms = Math.floor(date.getMilliseconds() / 10).toString().padStart(2, '0');
+      return `${hours}:${mins}:${secs}.${ms}`;
+    }
+
+    function addEventToLog(data) {
+      try {
+        const log = document.getElementById('eventsLog');
+        const item = document.createElement('div');
+        item.className = 'event-item';
+        const typeStr = data.type ? data.type.replace('EventType.', '') : 'UNKNOWN';
+
+        // Stop audio playback when the model turn is interrupted
+        if (typeStr === 'MODEL_TURN_INTERRUPTED') {
+          console.log('Model turn interrupted - stopping audio playback');
+          stopAudioPlayback();
+        }
+        let dataStr = typeof data.data === 'object' ? JSON.stringify(data.data) : (data.data || '');
+        const fullData = dataStr;
+
+        if (shouldFilterEvent(typeStr, dataStr)) {
+          return;
+        }
+
+        // Handle OUTPUT_TRANSCRIPT by buffering instead of direct display
+        if (typeStr === 'OUTPUT_TRANSCRIPT') {
+          let transcriptData = data.data;
+          if (typeof transcriptData === 'string') {
+            try {
+              transcriptData = JSON.parse(transcriptData);
+            } catch (e) {
+              transcriptData = { text: transcriptData, finished: false };
+            }
+          }
+          const text = transcriptData?.text || '';
+          const finished = transcriptData?.finished || false;
+          transcriptBuffer.append(text, finished);
+          return;
+        }
+
+        // Flush transcript buffer on turn complete events
+        if (typeStr === 'MODEL_TURN_COMPLETE' || typeStr === 'MODEL_TURN_INTERRUPTED' || typeStr === 'GENERATION_COMPLETE') {
+          transcriptBuffer.flush();
+        }
+
+        const timeStr = formatTime(data.timestamp);
+        item.dataset.eventType = typeStr;
+
+        let summary = '';
+        let details = '';
+
+        if (typeStr === 'SYSTEM_LOG') {
+          try {
+            const logData = typeof data.data === 'object' ? data.data : JSON.parse(data.data);
+            const levelClass = 'type-LOG_' + logData.level;
+            summary = escapeHtml(logData.message);
+            details = `Level: ${logData.level}\nModule: ${logData.module}\nFunction: ${logData.funcName}\nLine: ${logData.lineno}`;
+            item.innerHTML = `
+              <div class="event-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="event-caret">▶</span>
+                <span class="event-type ${levelClass}">[LOG]</span>
+                <span class="event-time">${timeStr}</span>
+              </div>
+              <div class="event-summary">${summary}</div>
+              <div class="event-details">${details}</div>`;
+          } catch (parseErr) {
+            summary = escapeHtml(dataStr.substring(0, 100));
+            item.innerHTML = `
+              <div class="event-header" onclick="this.parentElement.classList.toggle('expanded')">
+                <span class="event-caret">▶</span>
+                <span class="event-type type-SYSTEM_LOG">[LOG]</span>
+                <span class="event-time">${timeStr}</span>
+              </div>
+              <div class="event-summary">${summary}</div>
+              <div class="event-details">${escapeHtml(fullData)}</div>`;
+          }
+        } else {
+          let maxLen = 100;
+          if (typeStr === 'TOOL_CALL' || typeStr === 'TOOL_RESULT') {
+            maxLen = 300;
+            item.classList.add('event-tall');
+          }
+
+          if (typeStr === 'MODEL_TURN' || typeStr === 'MODEL_TEXT_INPUT') {
+            try {
+              summary = escapeHtml(getTextFromParts(dataStr));
+            } catch (parseErr) {
+              summary = escapeHtml(dataStr.substring(0, 100));
+            }
+          } else {
+            summary = dataStr.length > maxLen ? escapeHtml(dataStr.substring(0, maxLen)) + '...' : escapeHtml(dataStr);
+          }
+
+          const sourceStr = data.source ? data.source.replace('EventSource.', '') : '';
+          const typeColorClass = getEventTypeClass(typeStr);
+
+          item.innerHTML = `
+            <div class="event-header" onclick="this.parentElement.classList.toggle('expanded')">
+              <span class="event-caret">▶</span>
+              <span class="event-type ${typeColorClass}">[${typeStr}]</span>
+              <span class="event-source">${sourceStr}</span>
+              <span class="event-time">${timeStr}</span>
+            </div>
+            <div class="event-summary">${summary}</div>
+            <div class="event-details">${escapeHtml(fullData)}</div>`;
+        }
+
+        log.appendChild(item);
+        log.scrollTop = log.scrollHeight;
+        if (log.children.length > 100) {
+          log.removeChild(log.firstChild);
+        }
+      } catch (err) {
+        console.error('Error adding event to log:', err, data);
+      }
+    }
+
+    function addStitchedTranscriptToLog(stitchedText) {
+      try {
+        const log = document.getElementById('eventsLog');
+        const item = document.createElement('div');
+        item.className = 'event-item';
+        item.dataset.eventType = 'OUTPUT_TRANSCRIPT';
+
+        const timeStr = formatTime(new Date().toISOString());
+        const typeColorClass = getEventTypeClass('OUTPUT_TRANSCRIPT');
+        const summary = stitchedText.length > 200 ? escapeHtml(stitchedText.substring(0, 200)) + '...' : escapeHtml(stitchedText);
+
+        item.innerHTML = `
+          <div class="event-header" onclick="this.parentElement.classList.toggle('expanded')">
+            <span class="event-caret">▶</span>
+            <span class="event-type ${typeColorClass}">[STITCHED_AUDIO_TRANSCRIPT]</span>
+            <span class="event-time">${timeStr}</span>
+          </div>
+          <div class="event-summary">${summary}</div>
+          <div class="event-details">${escapeHtml(stitchedText)}</div>`;
+
+        log.appendChild(item);
+        log.scrollTop = log.scrollHeight;
+        if (log.children.length > 100) {
+          log.removeChild(log.firstChild);
+        }
+      } catch (err) {
+        console.error('Error adding stitched transcript to log:', err);
+      }
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function updateStatus(msg) {
+      document.getElementById('statusBar').textContent = msg;
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('textInput');
+      const text = input.value.trim();
+      if (!text) return;
+
+      stopAudioPlayback();
+
+      try {
+        const response = await fetch(EXTERNAL_CONTROLLER + '/publish_event/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'MODEL_TEXT_INPUT',
+            source: 'USER',
+            data: text,
+            metadata: {}
+          })
+        });
+        if (response.ok) {
+          input.value = '';
+          updateStatus('Command transmitted');
+        } else {
+          updateStatus('Transmission failed');
+        }
+      } catch (err) {
+        updateStatus('Error: ' + err.message);
+      }
+    }
+
+    const resizer = document.getElementById('resizer');
+    const imagePanel = document.getElementById('imagePanel');
+    const eventsPanel = document.getElementById('eventsPanel');
+    let isResizing = false;
+
+    resizer.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      resizer.classList.add('active');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      const containerRect = document.querySelector('.main-container').getBoundingClientRect();
+      const newEventsPanelWidth = containerRect.right - e.clientX;
+      const clampedWidth = Math.min(Math.max(newEventsPanelWidth, 280), 600);
+      eventsPanel.style.width = clampedWidth + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      isResizing = false;
+      resizer.classList.remove('active');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    });
+
+    document.getElementById('filterBtn').addEventListener('click', () => {
+      document.getElementById('filterDropdown').classList.toggle('show');
+    });
+
+    document.getElementById('sendBtn').addEventListener('click', sendMessage);
+
+    document.getElementById('textInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') sendMessage();
+    });
+
+    document.getElementById('zoomBtn').addEventListener('click', () => alert('Zoom: Not implemented yet'));
+    document.getElementById('addViewBtn').addEventListener('click', () => alert('Add View: Not implemented yet'));
+    document.getElementById('overridesBtn').addEventListener('click', () => alert('Overrides: Not implemented yet'));
+    document.getElementById('addFileBtn').addEventListener('click', () => alert('Add file: Not implemented yet'));
+    document.getElementById('micBtn').addEventListener('click', toggleRecording);
+
+
+
+    document.addEventListener('click', (e) => {
+      const filterContainer = document.querySelector('.filter-container');
+      if (!filterContainer.contains(e.target)) {
+        document.getElementById('filterDropdown').classList.remove('show');
+      }
+    });
+
+    init();
+  </script>
+</body>
+</html>

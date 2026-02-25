@@ -20,7 +20,6 @@ from absl import logging
 import dm_env
 from dm_env import specs
 from gdm_robotics.interfaces import types as gdmr_types
-from lerobot.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
 
 from safari_sdk.logging.python import episodic_logger
@@ -31,6 +30,12 @@ _LEROBOT_ACTION_KEY = "action"
 _LEROBOT_FRAME_INDEX_KEY = "frame_index"
 _LEROBOT_NEXT_DONE_KEY = "next.done"
 _LEROBOT_OBSERVATION_KEY_PREFIX = "observation."
+_LEROBOT_IMAGE_HEIGHT_LABEL = "height"
+_LEROBOT_IMAGE_WIDTH_LABEL = "width"
+# Accept either name for channels
+_LEROBOT_IMAGE_CHANNELS_LABELS = ("channel", "channels")
+_LEROBOT_NAMES_KEY = "names"
+
 # _LEROBOT_TASK_KEY maps to _INSTRUCTION_KEY and eventually will be used to
 # populate the instruction label in the SSOT Session.
 _LEROBOT_TASK_KEY = "task"
@@ -113,8 +118,18 @@ class LeRobotEpisodicLogger:
         )
       # Add timestamp to observation spec. This is used to plumb the timestamp
       # down into internal data storage engines.
-      self._timestep_spec.observation[_TIMESTAMP_KEY] = specs.Array(
+      # Even though self._timestep_spec.observation is a dict (see below),
+      # it is typed as an (immutable) Mapping, so to prevent typing errors we
+      # create a new dict here.
+      new_observation_spec = dict(self._timestep_spec.observation)
+      new_observation_spec[_TIMESTAMP_KEY] = specs.Array(
           shape=(), dtype=np.int64, name=_TIMESTAMP_KEY
+      )
+      self._timestep_spec = gdmr_types.TimeStepSpec(
+          observation=new_observation_spec,
+          reward=self._timestep_spec.reward,
+          discount=self._timestep_spec.discount,
+          step_type=self._timestep_spec.step_type,
       )
 
     self._episodic_logger: episodic_logger.EpisodicLogger | None = None
@@ -150,11 +165,42 @@ class LeRobotEpisodicLogger:
         )
       elif key.startswith(_LEROBOT_OBSERVATION_KEY_PREFIX):
         obs_key = key.replace(_LEROBOT_OBSERVATION_KEY_PREFIX, "", 1)
-        observation_spec[obs_key] = specs.Array(
-            shape=tuple(feature_info[_SHAPE_KEY]),
-            dtype=dtype,
-            name=obs_key,
-        )
+        if obs_key in self._image_observation_keys:
+          # Use the dimension names to read the image shape, rather than just
+          # copying the dimension order from the data. The metadata might have
+          # dimensions labeled in the order H,W,C or C,H,W.
+          names = feature_info[_LEROBOT_NAMES_KEY]
+          # Find the channel dimension
+          for label in _LEROBOT_IMAGE_CHANNELS_LABELS:
+            if label in names:
+              channel_dim = label
+              break
+          else:
+            raise ValueError(
+                f"Could not find channel dimension in names {names}. "
+                f"Expected one of {_LEROBOT_IMAGE_CHANNELS_LABELS}."
+            )
+          # The observation_spec expects the order (H, W, C).
+          dim_order = [
+              names.index(dim)
+              for dim in [
+                  _LEROBOT_IMAGE_HEIGHT_LABEL,
+                  _LEROBOT_IMAGE_WIDTH_LABEL,
+                  channel_dim,
+              ]
+          ]
+          shape = tuple(feature_info[_SHAPE_KEY][i] for i in dim_order)
+          observation_spec[obs_key] = specs.Array(
+              shape=shape,
+              dtype=dtype,
+              name=obs_key,
+          )
+        else:
+          observation_spec[obs_key] = specs.Array(
+              shape=tuple(feature_info[_SHAPE_KEY]),
+              dtype=dtype,
+              name=obs_key,
+          )
 
     if action_spec is None:
       raise ValueError("Action spec not found in features.")
@@ -189,7 +235,7 @@ class LeRobotEpisodicLogger:
     self._current_episode_id = episode_id
     agent_id = f"{_AGENT_ID_PREFIX}{episode_id}"
     logging.info("Starting episode %s with agent id %s", episode_id, agent_id)
-    self._episodic_logger = episodic_logger.EpisodicLogger.create(
+    config = episodic_logger.EpisodicLoggerConfig(
         agent_id=agent_id,
         task_id=self._task_id,
         output_directory=self._output_directory,
@@ -201,6 +247,7 @@ class LeRobotEpisodicLogger:
         timestamp_key=_TIMESTAMP_KEY,
         validate_data_with_spec=True,
     )
+    self._episodic_logger = episodic_logger.EpisodicLogger.create(config)
     self._previous_action = None
 
   def finish_episode(self) -> None:
@@ -269,7 +316,7 @@ class LeRobotEpisodicLogger:
 
 def convert_lerobot_data_to_mcap(
     *,
-    dataset: LeRobotDataset,
+    dataset,
     task_id: str,
     output_directory: str,
     proprioceptive_observation_keys: list[str],
@@ -294,7 +341,7 @@ def convert_lerobot_data_to_mcap(
       max_workers,
   )
 
-  episodes = dataset.meta.episodes.keys()
+  episodes = range(num_episodes_to_process)
   # Stores the start timestamps for each episode in a list, in the same
   # insertion order as episodes in dataset.metedata.episodes dict.
   ordered_start_timestamps_ns = []
@@ -351,9 +398,6 @@ def convert_lerobot_data_to_mcap(
 
     thread_logger.finish_episode()
 
-  # Dictionary of tensors that store the start and end indices of each episode
-  # in the dataset.
-  episode_indices = dataset.episode_data_index
   with concurrent.futures.ThreadPoolExecutor(
       max_workers=max_workers
   ) as executor:
@@ -361,8 +405,8 @@ def convert_lerobot_data_to_mcap(
         executor.submit(
             _process_episode,
             i,
-            episode_indices["from"][i],
-            episode_indices["to"][i],
+            dataset.meta.episodes[i]["dataset_from_index"],
+            dataset.meta.episodes[i]["dataset_to_index"],
             ordered_start_timestamps_ns[i],
         )
         for i in range(num_episodes_to_process)

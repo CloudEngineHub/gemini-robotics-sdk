@@ -11,18 +11,58 @@ download the finetuned checkpoint, etc. Most of the functionality requires you
 to join Gemini Robotics Trusted Tester Program to use. See details in Gemini
 Robotics [main page](https://deepmind.google/models/gemini-robotics/).
 
-## Installation and access the source code
+## Source Code
 
-Safari SDK can be easily installed via PyPI. It is recommended to use a
-virtual environment to avoid dependency version conflict.
+The source code can be found in
+[GitHub](https://github.com/google-deepmind/gemini-robotics-sdk).
+
+Note: Unless stated otherwise, the commands below assume that your working
+directory is the root of your repository clone (ie, the same directory which
+contains the `pyproject.toml` file).
+
+## Installing the SDK
+
+### Installing Pip Dependencies
+
+The pyproject.toml file specifies the dependencies for the Safari SDK, including
+allowed version ranges for some packages. The requirements.txt file specifies
+exact versions and hashes of each of those dependencies; internal unit tests use
+these versions, and installing them in a virtual environment before installing
+the SDK is recommended to avoid failures due to upstream package changes:
+
+```shell
+pip install -r requirements.txt
+```
+
+### Updating Pip Dependencies
+
+A script is provided which updates the requirements.txt file to the most recent
+versions of dependencies which satisfy the constraints in the pyproject.toml
+file. This allows those updates to be done at discrete times (rather than
+whenever those updates are pushed to PyPi) and tested in isolation before being
+pushed to all users. To run that script:
+
+```shell
+scripts/update_pip_dependencies.sh
+```
+
+### Installing from PyPi
+
+The Safari SDK can be easily installed via PyPI.
 
 ```shell
 pip install safari_sdk
 ```
 
-The source code can be found in [GitHub](https://github.com/google-deepmind/gemini-robotics-sdk).
+### Installing from Source Code
 
-## Building the wheel after code change
+The Safari SDK can also be installed from the source code.
+
+```shell
+pip install -e .[dev]
+```
+
+## Building the Wheel
 
 To build a Python wheel, run the following command from the root of the
 repository.

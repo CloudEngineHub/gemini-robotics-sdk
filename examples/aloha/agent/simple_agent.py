@@ -269,8 +269,7 @@ class SimpleAlohaAgent(agent.Agent):
         config=config,
         embodiment=embodiment,
         system_prompt=system_prompt,
-        http_options={_BASE_URL_KEY: config.base_url},
-        initial_camera_names=({
+        stream_name_to_camera_name=({
             aloha.OVERHEAD_ENDPOINT: (
                 f"Image from camera {aloha.OVERHEAD_ENDPOINT}"
             )
@@ -293,9 +292,10 @@ class SimpleAlohaAgent(agent.Agent):
             api_key=self._api_key,
             sd_camera_endpoint_names=_SD_CAMERA_ENDPOINTS,
         )
-      case _:
+      case agentic_flags.SDToolName.PEDAL_TRIGGERED_SUCCESS_DETECTOR:
         raise ValueError(
-            f"Unsupported success detection tool: {self._config.sd_tool_name}"
+            "Unsupported success detection tool:"
+            f" {tool_name}"
         )
     if self._config.sd_timeout_seconds is not None:
       sd_tool.set_timeout_seconds(  # pytype: disable=attribute-error

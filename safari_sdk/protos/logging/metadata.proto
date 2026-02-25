@@ -16,7 +16,9 @@ syntax = "proto2";
 
 package safari_sdk.protos.logging;
 
+import "google/protobuf/struct.proto";
 import "safari_sdk/protos/label.proto";
+import "safari_sdk/protos/logging/orchestrator_info.proto";
 import "safari_sdk/protos/logging/policy_environment_metadata.proto";
 
 message KeyRange {
@@ -52,6 +54,12 @@ message Session {
 
   // Freeform tags for identifying and filtering sessions in orchestration.
   repeated string tags = 7;
+
+  // The setup configs of the session. The key is the stringified config ID.
+  map<string, google.protobuf.Value> setup_configs = 8;
+
+  // The orchestrator info of the session.
+  optional OrchestratorInfo orchestrator_info = 9;
 }
 
 // Metadata of a log file. There should be one file metadata per log file.

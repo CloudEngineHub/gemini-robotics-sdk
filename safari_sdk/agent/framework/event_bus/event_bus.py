@@ -15,8 +15,10 @@
 """Async event bus."""
 
 import asyncio
+import base64
 import collections
 import datetime
+import json
 import uuid
 
 from absl import logging
@@ -50,8 +52,8 @@ class EventBus:
         types.EventType, set[types.EventBusHandlerSignature]
     ] = collections.defaultdict(set)
     self._event_queue: asyncio.Queue[types.Event] = asyncio.Queue()
-    self._main_task: asyncio.Task | None = None
-    self._handler_tasks: dict[str, asyncio.Task] = {}
+    self._main_task: asyncio.Task[None] | None = None
+    self._handler_tasks: dict[str, asyncio.Task[None]] = {}
     self._is_running = False
     self._agent_session_id: str | None = None
     self._config = config
@@ -63,6 +65,9 @@ class EventBus:
         raise ValueError("Specify the logging flag `logging.robot_id`.")
       if self._logging_output_directory is None:
         raise ValueError("Specify the logging flag `logging.output_directory`.")
+      self._has_debug_event_been_published = False
+      self._logger_start_nsec: int | None = None
+      self._logger_end_nsec: int | None = None
       self._stream_logger: stream_logger_lib.StreamLogger = (
           stream_logger_lib.StreamLogger(
               agent_id=self._robot_id,
@@ -98,7 +103,15 @@ class EventBus:
 
   def _log_event(self, event: types.Event):
     """Log the event to the stream logger."""
-    # All events are logged to the event stream.
+    # Skip logging SYSTEM_LOG events to the stream logger (SSOT).
+    if event.type == EventType.SYSTEM_LOG:
+      return
+    if (
+        self._config.exclude_model_image_input_logging
+        and event.type == EventType.MODEL_IMAGE_INPUT
+    ):
+      return
+    # All other events are logged to the event stream.
     self._log_to_session_stream(event)
     # Also log metadata to the session label.
     if (
@@ -106,6 +119,8 @@ class EventBus:
         or event.type == EventType.DEBUG
     ):
       self._log_to_session_label(event)
+    if event.type == EventType.DEBUG and "@d+" in str(event.data):
+      self._has_debug_event_been_published = True
 
   def _log_to_session_label(self, event: types.Event):
     """Log the event as part of the session label.
@@ -138,13 +153,25 @@ class EventBus:
 
   def _log_to_session_stream(self, event: types.Event):
     """Log the event as part of the event stream."""
+    # LINT.IfChange
     message = struct_pb2.Struct()
     message.fields["event_type"].string_value = event.type.value
     message.fields["event_source"].string_value = event.source.value
     message.fields["event_timestamp"].string_value = str(
         event.timestamp.timestamp()
     )
-    message.fields["event_data"].string_value = str(event.data)
+    if isinstance(event.data, bytes):
+      # If you udpate any of the logging code, especially around images (e.g.
+      # MODEL_IMAGE_INPUT) which are logged as bytes, please also update the
+      # SSOT agent video builder code. Note, any other changes around event
+      # logging may also require updates to the SSOT video builder code.
+      message.fields["event_data"].string_value = base64.b64encode(
+          event.data
+      ).decode("ascii")
+    elif event.type == EventType.CONTEXT_SNAPSHOT:
+      message.fields["event_data"].string_value = json.dumps(event.data)
+    else:
+      message.fields["event_data"].string_value = str(event.data)
     if event.metadata:
       event_metadata_struct = struct_pb2.Struct()
       for key, value in event.metadata.items():
@@ -158,6 +185,7 @@ class EventBus:
         message=message,
         publish_time_nsec=int(publish_time_nsec.timestamp() * 1e9),
     )
+    # LINT.ThenChange(//depot/google3/robotics/logging/data_genie/enhancer_server/handlers/ssot_video_builder/ssot_agent_video_helpers.py)
 
   async def publish(self, event: types.Event):
     """Publish an event to the event bus."""
@@ -170,7 +198,13 @@ class EventBus:
       )
     await self._event_queue.put(event)
     if self._enable_logging:
-      self._log_event(event)
+      if event.type == EventType.CONTEXT_SNAPSHOT:
+        # Log CONTEXT_SNAPSHOT events asynchronously to avoid blocking the
+        # event loop — these payloads can be large (full conversation
+        # history with base64-encoded images).
+        asyncio.ensure_future(asyncio.to_thread(self._log_event, event))
+      else:
+        self._log_event(event)
 
   def start(self) -> None:
     """Start the event bus."""
@@ -178,11 +212,14 @@ class EventBus:
       logging.info("Event queue task already exists and is not done.")
     self._agent_session_id = str(uuid.uuid4())
     if self._enable_logging:
-      now = datetime.datetime.now(tz=_LOS_ANGELES_TIMEZONE)
+      episode_start = datetime.datetime.now()
+      date_string = episode_start.strftime("date-%Y-%m-%d-time-%H-%M-%S")
+      start_nsec = int(episode_start.timestamp() * 1e9)
+      self._logger_start_nsec = start_nsec
       self._stream_logger.start_session(
-          start_nsec=int(now.timestamp() * 1e9),
+          start_nsec=start_nsec,
           task_id="agent_task_id_placeholder",
-          output_file_prefix=now.strftime(_LOGGING_TIMESTAMP_FORMAT),
+          output_file_prefix=f"agent_event_bus_{date_string}",
       )
       self._stream_logger.add_session_label(
           label_pb2.LabelMessage(
@@ -190,10 +227,18 @@ class EventBus:
               label_value=struct_pb2.Value(string_value=self._agent_session_id),
           )
       )
+      if self._config.logging_session_log_type_key is not None:
+        log_type_value = self._config.logging_session_log_type_value
+        self._stream_logger.add_session_label(
+            label_pb2.LabelMessage(
+                key=self._config.logging_session_log_type_key,
+                label_value=struct_pb2.Value(string_value=log_type_value),
+            )
+        )
     self._main_task = asyncio.create_task(self._event_queue_loop())
     self._is_running = True
 
-  def shutdown(self) -> None:
+  def shutdown(self) -> dict[str, str] | None:
     """Shutdown the event bus."""
     if not self._main_task or self._main_task.done():
       logging.info("Event queue task is not existent or already done.")
@@ -202,10 +247,35 @@ class EventBus:
     self._main_task.cancel()
     self._main_task = None
     self._is_running = False
+    info = {
+        "agent_session_id": (
+            self._agent_session_id if self._agent_session_id else ""
+        ),
+    }
     if self._enable_logging:
-      now = datetime.datetime.now(tz=_LOS_ANGELES_TIMEZONE)
-      self._stream_logger.stop_session(stop_nsec=int(now.timestamp() * 1e9))
+      # This session label allows us to flag an agent session for triage later.
+      if self._has_debug_event_been_published:
+        self._stream_logger.add_session_label(
+            label_pb2.LabelMessage(
+                key="is_flagged_for_triage",
+                label_value=struct_pb2.Value(bool_value=True),
+            )
+        )
+      episode_end = datetime.datetime.now()
+      session_end_time_ns = int(episode_end.timestamp() * 1e9)
+      self._logger_end_nsec = session_end_time_ns
+      self._stream_logger.stop_session(stop_nsec=session_end_time_ns)
+      info.update({
+          "logger_start_nsec": (
+              str(self._logger_start_nsec) if self._logger_start_nsec else ""
+          ),
+          "logger_end_nsec": (
+              str(self._logger_end_nsec) if self._logger_end_nsec else ""
+          ),
+          "session_log_type": self._config.logging_session_log_type_value,
+      })
     self._agent_session_id = None
+    return info
 
   async def _event_queue_loop(self) -> None:
     while self._main_task and not self._main_task.done():

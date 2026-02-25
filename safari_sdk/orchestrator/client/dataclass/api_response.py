@@ -48,6 +48,7 @@ class OrchestratorAPIResponse:
     robot_job: Actual RobotJob dataclass object, containing all the values
       of the current robot job.
     robot_job_id: Robot job ID for the current robot job and work unit.
+    launch_command: Launch command for the current robot job.
     work_unit_id: Work unit ID for the current work unit.
     work_unit: Actual WorkUnit dataclass object, containing all the values
       of the current work unit.
@@ -73,6 +74,7 @@ class OrchestratorAPIResponse:
   robot_id: str | None = None
   robot_job: robot_job_data.RobotJob | None = None
   robot_job_id: str | None = None
+  launch_command: str | None = None
   work_unit_id: str | None = None
   work_unit: work_unit_data.WorkUnit | None = None
   work_unit_stage: work_unit_data.WorkUnitStage | None = None

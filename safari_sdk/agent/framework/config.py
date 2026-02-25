@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -18,11 +18,14 @@
 
 import dataclasses
 
+from absl import logging
+from google.genai import types as genai_types
+
 from safari_sdk.agent.framework import flags as agentic_flags
 from safari_sdk.agent.framework import types
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class AgentFrameworkConfig:
   """Configuration for the Safari agent framework.
 
@@ -37,11 +40,9 @@ class AgentFrameworkConfig:
   # General configuration
   # API key for the Gemini Live and Gemini API.
   api_key: str | None = None
-  # Base URL of the Gemini Live and Gemini API. For example: prod:
-  # https://generativelanguage.googleapis.com, autopush:
-  # https://autopush-generativelanguage.sandbox.googleapis.com, staging:
-  # https://staging-generativelanguage.sandbox.googleapis.com, preprod:
-  # https://preprod-generativelanguage.googleapis.com
+  # Base URL of the Gemini Live and Gemini API. For example:
+  # prod:
+  # https://generativelanguage.googleapis.com,
   base_url: str = 'https://generativelanguage.googleapis.com'
   # The logging level to use.
   log_level: str = 'INFO'
@@ -55,13 +56,13 @@ class AgentFrameworkConfig:
   # The port to use for the external controller server. Has no effect if
   # control_mode is not set to LAUNCH_SERVER.
   external_controller_port: int = 8887
-  # Whether to use operator friendly terminal UI. This mode is designed for
-  # operator-led data collection or evaluation. If it is enabled, the terminal
-  # UI will operate in a much less verbose manner, displaying only essential
-  # information about tool-call related events. For instance, when
-  # run_instruction_until_done is called, the UI only displays the instruction
-  # itself and omits other details such as the call_id.
-  use_operator_friendly_terminal_ui: bool = False
+  # Whether to publish Python logging events to the event bus.
+  publish_logging_events: bool = False
+  # The external UI type to use for event printing. This allows customizing
+  # how events are printed to external UIs (e.g., robotics operator UI) without
+  # modifying the core terminal UI logic. OPERATOR_DATA_COLLECT mode is designed
+  # for operator-led data collection or evaluation with simplified output.
+  external_ui_type: types.ExternalUIType = types.ExternalUIType.NONE
 
   # Agent configuration
   # The name of the agent to use.
@@ -74,9 +75,15 @@ class AgentFrameworkConfig:
   enable_audio_input: bool = False
   # Whether to enable audio output.
   enable_audio_output: bool = False
+  # Whether to handle audio on the robot.
+  handle_audio_on_robot: bool = False
+  # Whether to handle audio on the GUI.
+  handle_audio_on_gui: bool = True
   # Whether to enable listening while speaking.
   listen_while_speaking: bool = False
-  # Whether to enable audio transcription.
+  # Whether to display audio transcription in the terminal UI. Audio
+  # transcription is always enabled in the Live API when audio input/output is
+  # enabled; this flag only controls whether the transcription is displayed.
   enable_audio_transcription: bool = False
   # The name of the voice to use for the Gemini Live agent. Has no effect if
   # agent.enable_audio_output is False.
@@ -125,6 +132,48 @@ class AgentFrameworkConfig:
   context_compression_sliding_window_target: int = 60000
   # Whether to log the Gemini query for all tools.
   log_gemini_query: bool = False
+  # Whether to stitch multiple camera images into a single grid image before
+  # sending to the Gemini Live model. When disabled, images are sent
+  # individually.
+  enable_image_stitching: bool = False
+  # Whether to show camera name labels on stitched images. Only has effect
+  # when enable_image_stitching is True.
+  show_camera_name_in_stitched_image: bool = True
+  # Whether to enable automatic session resumption when receiving GO_AWAY from
+  # the Live API. When enabled, the framework will automatically reconnect
+  # after a 20 second grace period.
+  enable_automatic_session_resumption: bool = True
+  # Maximum number of images to keep in conversation history for non-streaming
+  # non_streaming_image_pruning_target_amount.
+  non_streaming_image_pruning_trigger_amount: int = 60
+  # When the number of images exceeds
+  # non_streaming_image_pruning_trigger_amount, prune down to this number.
+  # This batch pruning preserves prefill cache.
+  non_streaming_image_pruning_target_amount: int = 15
+  # The interval in seconds for buffering images in the non-streaming handler.
+  non_streaming_image_buffering_interval_seconds: float = 1.0
+  # Whether to discard buffered images after each turn. When True (default),
+  # images are cleared after being used. When False, images accumulate.
+  non_streaming_discard_images_after_turn: bool = True
+  non_streaming_fr_latest_image_only: bool = True
+  non_streaming_include_stream_names: bool = True
+  non_streaming_thinking_level: str | None = None
+
+  # Agent model generation parameters (for non-streaming handler).
+  # Temperature for the agent model (0.0-2.0). None uses server default.
+  agent_temperature: float | None = None
+  # Max output tokens for agent responses. None uses server default.
+  agent_max_output_tokens: int | None = None
+  # Thinking budget for the agent model. 0=disabled, -1=auto, None=default.
+  agent_thinking_budget: int | None = None
+  # Media resolution for images. Defaults to HIGH (1120 tokens).
+  agent_media_resolution: genai_types.MediaResolution = (
+      genai_types.MediaResolution.MEDIA_RESOLUTION_MEDIUM
+  )
+
+  orchestrator_handler_type: types.OrchestratorHandlerType = (
+      types.OrchestratorHandlerType.STREAMING
+  )
 
   # Success detection configuration
   # Whether to run success detection in dry run mode. If True, decide success
@@ -140,7 +189,11 @@ class AgentFrameworkConfig:
   sd_model_name: str = 'gemini-robotics-er-1.5-preview'
   # The thinking budget for the success detection model. 0 is DISABLED. -1 is
   # AUTOMATIC. The default values and allowed ranges are model dependent.
+  # Mutually exclusive with sd_thinking_level.
   sd_thinking_budget: int = -1
+  # The thinking level for V4/FierceFalcon success detection model (MINIMAL,
+  # LOW, MEDIUM, HIGH). Mutually exclusive with sd_thinking_budget.
+  sd_thinking_level: str | None = None
   # Whether to use progress prediction for success detection.
   sd_use_progress_prediction: bool = False
   # The threshold for the progress prediction time signal. The seconds left
@@ -182,6 +235,18 @@ class AgentFrameworkConfig:
   sd_ensemble_threshold: int = 1
   # The sleep interval in seconds for the ensemble SD model.
   sd_sleep_interval_s: float = 0.2
+  # Max output tokens for SD responses. None uses server default.
+  sd_max_output_tokens: int | None = None
+  # Media resolution for SD images (e.g. MEDIA_RESOLUTION_HIGH for 1120 tokens).
+  sd_media_resolution: genai_types.MediaResolution = (
+      genai_types.MediaResolution.MEDIA_RESOLUTION_HIGH
+  )
+  # Image stitching mode for SD: 'none', 'camera', or 'time'.
+  sd_stitch_mode: types.SDStitchMode = types.SDStitchMode.NONE
+  # Path to custom SD prompt file. If set, overrides default prompt.
+  sd_prompt_file: str | None = None
+  # Prompt name from registry. If unset, uses mode-appropriate default.
+  sd_prompt_name: str | None = None
 
   # Scene description configuration
   # Whether to use scene description.
@@ -207,6 +272,28 @@ class AgentFrameworkConfig:
   robot_id: str | None = None
   # The output directory for the logs.
   logging_output_directory: str = '/tmp/safari_logs'
+  # The key of the session log type. If logging is enabled then the agent logs
+  # from event bus will be saved to SSOT. This is the key which describes the
+  # session log type column for the SSOT table.
+  logging_session_log_type_key: str | None = None
+  # The value of the session log type. Default value is 'agent' to separate
+  # them from policy logs.
+  logging_session_log_type_value: str = 'agent'
+  exclude_model_image_input_logging: bool = False
+  non_streaming_enable_context_snapshot_logging: bool = True
+
+  def __post_init__(self):
+    if (
+        self.sd_thinking_budget is not None
+        and self.sd_thinking_budget != -1
+        and self.sd_thinking_level is not None
+    ):
+      raise ValueError(
+          'sd_thinking_budget and sd_thinking_level are mutually exclusive.'
+          ' Please set only one of them. sd_thinking_budget is for Gemini 2.5'
+          ' family models, while sd_thinking_level is for Gemini 3 family'
+          ' models.'
+      )
 
   @classmethod
   def create(
@@ -218,11 +305,15 @@ class AgentFrameworkConfig:
       control_mode: types.ControlMode | None = None,
       external_controller_host: str | None = None,
       external_controller_port: int | None = None,
+      publish_logging_events: bool | None = None,
+      external_ui_type: types.ExternalUIType | None = None,
       agent_name: str | None = None,
       meow_mode: bool | None = None,
       agent_model_name: str | None = None,
       enable_audio_input: bool | None = None,
       enable_audio_output: bool | None = None,
+      handle_audio_on_robot: bool | None = None,
+      handle_audio_on_gui: bool | None = None,
       listen_while_speaking: bool | None = None,
       enable_audio_transcription: bool | None = None,
       output_audio_voice_name: str | None = None,
@@ -232,6 +323,9 @@ class AgentFrameworkConfig:
       gemini_live_image_streaming_interval_seconds: float | None = None,
       remind_default_api_in_prompt: bool | None = None,
       no_chat_mode: bool | None = None,
+      # NOTE: since `None` causes the flag default to be used, and the flag
+      # defaults are "Hi" and "Aww out of time", you must set this to an empty
+      # list to disable reminders!
       reminder_text_list: list[str] | None = None,
       reminder_time_in_seconds: list[float] | None = None,
       use_language_control: bool | None = None,
@@ -239,11 +333,27 @@ class AgentFrameworkConfig:
       context_compression_trigger_tokens: int | None = None,
       context_compression_sliding_window_target: int | None = None,
       log_gemini_query: bool | None = None,
+      enable_image_stitching: bool | None = None,
+      show_camera_name_in_stitched_image: bool | None = None,
+      enable_automatic_session_resumption: bool | None = None,
+      non_streaming_image_pruning_trigger_amount: int | None = None,
+      non_streaming_image_buffering_interval_seconds: float | None = None,
+      non_streaming_image_pruning_target_amount: int | None = None,
+      non_streaming_discard_images_after_turn: bool | None = None,
+      non_streaming_fr_latest_image_only: bool | None = None,
+      non_streaming_include_stream_names: bool | None = None,
+      non_streaming_thinking_level: str | None = None,
+      agent_temperature: float | None = None,
+      agent_max_output_tokens: int | None = None,
+      agent_thinking_budget: int | None = None,
+      agent_media_resolution: genai_types.MediaResolution | None = None,
+      orchestrator_handler_type: types.OrchestratorHandlerType | None = None,
       sd_dry_run: bool | None = None,
       sd_tool_name: agentic_flags.SDToolName | None = None,
       sd_timeout_seconds: float | None = None,
       sd_model_name: str | None = None,
       sd_thinking_budget: int | None = None,
+      sd_thinking_level: str | None = None,
       sd_use_progress_prediction: bool | None = None,
       sd_pp_time_threshold: float | None = None,
       sd_pp_percent_threshold: float | None = None,
@@ -261,6 +371,8 @@ class AgentFrameworkConfig:
       sd_ensemble_size: int | None = None,
       sd_ensemble_threshold: int | None = None,
       sd_sleep_interval_s: float | None = None,
+      sd_max_output_tokens: int | None = None,
+      sd_media_resolution: genai_types.MediaResolution | None = None,
       use_scene_description: bool | None = None,
       scene_description_model_name: str | None = None,
       scene_description_thinking_budget: int | None = None,
@@ -268,10 +380,23 @@ class AgentFrameworkConfig:
       robot_backend_host: str | None = None,
       robot_backend_port: int | None = None,
       enable_logging: bool | None = None,
+      non_streaming_enable_context_snapshot_logging: bool | None = None,
       robot_id: str | None = None,
       logging_output_directory: str | None = None,
+      logging_session_log_type_key: str | None = None,
+      logging_session_log_type_value: str | None = None,
+      exclude_model_image_input_logging: bool | None = None,
   ) -> 'AgentFrameworkConfig':
     """Creates an AgentFrameworkConfig from flags with optional overrides."""
+    if (control_mode == types.ControlMode.TERMINAL_ONLY) and (
+        handle_audio_on_gui
+    ):
+      logging.warning(
+          'handle_audio_on_gui is set to True while control_mode is'
+          ' TERMINAL_ONLY. This combination is not supported. Setting'
+          ' handle_audio_on_gui to False.'
+      )
+      handle_audio_on_gui = False
     return cls(
         api_key=api_key or agentic_flags.AGENTIC_API_KEY.value,
         base_url=base_url or agentic_flags.AGENTIC_BASE_URL.value,
@@ -285,6 +410,13 @@ class AgentFrameworkConfig:
             external_controller_port
             or agentic_flags.AGENTIC_EXTERNAL_CONTROLLER_PORT.value
         ),
+        publish_logging_events=(
+            publish_logging_events
+            or agentic_flags.AGENTIC_PUBLISH_LOGGING_EVENTS.value
+        ),
+        external_ui_type=(
+            external_ui_type or agentic_flags.AGENTIC_EXTERNAL_UI_TYPE.value
+        ),
         agent_name=agent_name or agentic_flags.AGENTIC_AGENT_NAME.value,
         meow_mode=meow_mode or agentic_flags.AGENTIC_MEOW_MODE.value,
         agent_model_name=(
@@ -296,6 +428,14 @@ class AgentFrameworkConfig:
         enable_audio_output=(
             enable_audio_output
             or agentic_flags.AGENTIC_ENABLE_AUDIO_OUTPUT.value
+        ),
+        handle_audio_on_robot=(
+            handle_audio_on_robot
+            or agentic_flags.AGENTIC_HANDLE_AUDIO_ON_ROBOT.value
+        ),
+        handle_audio_on_gui=(
+            handle_audio_on_gui
+            or agentic_flags.AGENTIC_HANDLE_AUDIO_ON_GUI.value
         ),
         listen_while_speaking=(
             listen_while_speaking
@@ -331,11 +471,14 @@ class AgentFrameworkConfig:
         ),
         no_chat_mode=(no_chat_mode or agentic_flags.AGENTIC_NO_CHAT_MODE.value),
         reminder_text_list=(
-            reminder_text_list or agentic_flags.AGENTIC_REMINDER_TEXT_LIST.value
+            reminder_text_list
+            if reminder_text_list is not None
+            else agentic_flags.AGENTIC_REMINDER_TEXT_LIST.value
         ),
         reminder_time_in_seconds=(
             reminder_time_in_seconds
-            or agentic_flags.AGENTIC_REMINDER_TIME_IN_SECONDS.value
+            if reminder_time_in_seconds is not None
+            else agentic_flags.AGENTIC_REMINDER_TIME_IN_SECONDS.value
         ),
         use_language_control=(
             use_language_control
@@ -356,6 +499,74 @@ class AgentFrameworkConfig:
         log_gemini_query=(
             log_gemini_query or agentic_flags.AGENTIC_LOG_GEMINI_QUERY.value
         ),
+        enable_image_stitching=(
+            enable_image_stitching
+            or agentic_flags.AGENTIC_ENABLE_IMAGE_STITCHING.value
+        ),
+        show_camera_name_in_stitched_image=(
+            show_camera_name_in_stitched_image
+            or agentic_flags.AGENTIC_SHOW_CAMERA_NAME_IN_STITCHED_IMAGE.value
+        ),
+        enable_automatic_session_resumption=(
+            enable_automatic_session_resumption
+            if enable_automatic_session_resumption is not None
+            else agentic_flags.AGENTIC_ENABLE_AUTOMATIC_SESSION_RESUMPTION.value
+        ),
+        non_streaming_image_pruning_trigger_amount=(
+            non_streaming_image_pruning_trigger_amount
+            or agentic_flags.AGENTIC_NON_STREAMING_IMAGE_PRUNING_TRIGGER_AMOUNT.value
+        ),
+        non_streaming_image_pruning_target_amount=(
+            non_streaming_image_pruning_target_amount
+            if non_streaming_image_pruning_target_amount is not None
+            else agentic_flags.AGENTIC_NON_STREAMING_IMAGE_PRUNING_TARGET_AMOUNT.value
+        ),
+        non_streaming_image_buffering_interval_seconds=(
+            non_streaming_image_buffering_interval_seconds
+            or agentic_flags.AGENTIC_NON_STREAMING_IMAGE_BUFFERING_INTERVAL_SECONDS.value
+        ),
+        non_streaming_discard_images_after_turn=(
+            non_streaming_discard_images_after_turn
+            if non_streaming_discard_images_after_turn is not None
+            else agentic_flags.AGENTIC_NON_STREAMING_DISCARD_IMAGES_AFTER_TURN.value
+        ),
+        non_streaming_fr_latest_image_only=(
+            non_streaming_fr_latest_image_only
+            if non_streaming_fr_latest_image_only is not None
+            else agentic_flags.AGENTIC_NON_STREAMING_FR_LATEST_IMAGE_ONLY.value
+        ),
+        non_streaming_include_stream_names=(
+            non_streaming_include_stream_names
+            if non_streaming_include_stream_names is not None
+            else agentic_flags.AGENTIC_NON_STREAMING_INCLUDE_STREAM_NAMES.value
+        ),
+        non_streaming_thinking_level=(
+            non_streaming_thinking_level
+            or agentic_flags.AGENTIC_NON_STREAMING_THINKING_LEVEL.value
+        ),
+        agent_temperature=(
+            agent_temperature
+            if agent_temperature is not None
+            else agentic_flags.AGENTIC_AGENT_TEMPERATURE.value
+        ),
+        agent_max_output_tokens=(
+            agent_max_output_tokens
+            if agent_max_output_tokens is not None
+            else agentic_flags.AGENTIC_AGENT_MAX_OUTPUT_TOKENS.value
+        ),
+        agent_thinking_budget=(
+            agent_thinking_budget
+            if agent_thinking_budget is not None
+            else agentic_flags.AGENTIC_AGENT_THINKING_BUDGET.value
+        ),
+        agent_media_resolution=(
+            agent_media_resolution
+            or agentic_flags.AGENTIC_AGENT_MEDIA_RESOLUTION.value
+        ),
+        orchestrator_handler_type=(
+            orchestrator_handler_type
+            or agentic_flags.AGENTIC_ORCHESTRATOR_HANDLER_TYPE.value
+        ),
         sd_dry_run=sd_dry_run or agentic_flags.AGENTIC_SD_DRY_RUN.value,
         sd_tool_name=sd_tool_name or agentic_flags.AGENTIC_SD_TOOL_NAME.value,
         sd_timeout_seconds=(
@@ -366,6 +577,9 @@ class AgentFrameworkConfig:
         ),
         sd_thinking_budget=(
             sd_thinking_budget or agentic_flags.AGENTIC_SD_THINKING_BUDGET.value
+        ),
+        sd_thinking_level=(
+            sd_thinking_level or agentic_flags.AGENTIC_SD_THINKING_LEVEL.value
         ),
         sd_use_progress_prediction=(
             sd_use_progress_prediction
@@ -432,6 +646,18 @@ class AgentFrameworkConfig:
             sd_sleep_interval_s
             or agentic_flags.AGENTIC_SD_SLEEP_INTERVAL_S.value
         ),
+        sd_max_output_tokens=(
+            sd_max_output_tokens
+            if sd_max_output_tokens is not None
+            else agentic_flags.AGENTIC_SD_MAX_OUTPUT_TOKENS.value
+        ),
+        sd_media_resolution=(
+            sd_media_resolution
+            or agentic_flags.AGENTIC_SD_MEDIA_RESOLUTION.value
+        ),
+        sd_stitch_mode=agentic_flags.AGENTIC_SD_STITCH_MODE.value,
+        sd_prompt_file=agentic_flags.AGENTIC_SD_PROMPT_FILE.value,
+        sd_prompt_name=agentic_flags.AGENTIC_SD_PROMPT_NAME.value,
         use_scene_description=(
             use_scene_description
             or agentic_flags.AGENTIC_USE_SCENE_DESCRIPTION.value
@@ -461,5 +687,22 @@ class AgentFrameworkConfig:
         logging_output_directory=(
             logging_output_directory
             or agentic_flags.AGENTIC_LOGGING_OUTPUT_DIRECTORY.value
+        ),
+        logging_session_log_type_key=(
+            logging_session_log_type_key
+            or agentic_flags.AGENTIC_LOGGING_SESSION_LOG_TYPE_KEY.value
+        ),
+        logging_session_log_type_value=(
+            logging_session_log_type_value
+            or agentic_flags.AGENTIC_LOGGING_SESSION_LOG_TYPE_VALUE.value
+        ),
+        exclude_model_image_input_logging=(
+            exclude_model_image_input_logging
+            or agentic_flags.AGENTIC_EXCLUDE_MODEL_IMAGE_INPUT_LOGGING.value
+        ),
+        non_streaming_enable_context_snapshot_logging=(
+            non_streaming_enable_context_snapshot_logging
+            if non_streaming_enable_context_snapshot_logging is not None
+            else agentic_flags.AGENTIC_NON_STREAMING_ENABLE_CONTEXT_SNAPSHOT_LOGGING.value
         ),
     )

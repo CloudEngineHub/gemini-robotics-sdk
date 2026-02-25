@@ -23,7 +23,9 @@ from absl import logging
 
 from safari_sdk.agent.framework import config as framework_config
 from safari_sdk.agent.framework import types
-from safari_sdk.agent.framework.agents import agent
+from safari_sdk.agent.framework.agents import agent as agent_lib
+from safari_sdk.agent.framework.comms import external_controller
+from safari_sdk.agent.framework.comms import log_handler
 from safari_sdk.agent.framework.event_bus import event_bus
 from safari_sdk.agent.framework.ui import terminal_ui
 
@@ -53,7 +55,7 @@ class AgentFramework:
       self,
       bus: event_bus.EventBus,
       config: framework_config.AgentFrameworkConfig,
-      agent_instance: agent.Agent,
+      agent_instance: agent_lib.Agent,
       additional_components: Sequence[FrameworkComponent] | None = None,
   ):
     """Initializes the agent framework.
@@ -77,6 +79,26 @@ class AgentFramework:
       case types.ControlMode.TERMINAL_ONLY:
         self._components.append(
             terminal_ui.TerminalUI(bus=self._bus, config=self._config)
+        )
+      case types.ControlMode.LAUNCH_SERVER:
+        self._components.append(
+            external_controller.ExternalControllerFastAPIServer(
+                bus=self._bus,
+                host=config.external_controller_host,
+                port=config.external_controller_port,
+            )
+        )
+
+      case types.ControlMode.SERVER_AND_TERMINAL:
+        self._components.append(
+            terminal_ui.TerminalUI(bus=self._bus, config=self._config)
+        )
+        self._components.append(
+            external_controller.ExternalControllerFastAPIServer(
+                bus=self._bus,
+                host=config.external_controller_host,
+                port=config.external_controller_port,
+            )
         )
       case _:
         raise ValueError(f"Unsupported control mode: {config.control_mode}")
@@ -110,6 +132,13 @@ class AgentFramework:
       if not self._bus.is_running:
         self._bus.start()
       logging.info("Event bus started.")
+
+      if self._config.publish_logging_events:
+        event_log_handler = log_handler.EventBusLogHandler(
+            self._bus, min_level=logging.INFO
+        )
+        event_log_handler.set_loop(asyncio.get_running_loop())
+        logging.get_absl_logger().addHandler(event_log_handler)
 
       logging.info("Connecting agent...")
       await self._agent.connect()

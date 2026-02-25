@@ -12,10 +12,8 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-import json
 from unittest import mock
 
-from absl import flags
 from absl.testing import absltest
 from absl.testing import parameterized
 import dm_env
@@ -26,46 +24,14 @@ import numpy as np
 from safari_sdk.model import additional_observations_provider
 from safari_sdk.model import constants
 from safari_sdk.model import gemini_robotics_policy
-
-FLAGS = flags.FLAGS
-FLAGS.mark_as_parsed()
+from safari_sdk.model import remote_model_interface
 
 
-# TODO: We need to test that we encode the observation correctly.
 class GeminiRoboticsPolicyTest(parameterized.TestCase):
 
-  def test_initialize_policy(self):
-
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
-
-      policy = gemini_robotics_policy.GeminiRoboticsPolicy(
-          serve_id="test_serve_id",
-          task_instruction_key="test_task_instruction",
-          image_observation_keys=(
-              "test_camera_1",
-              "test_camera_2",
-          ),
-          proprioceptive_observation_keys=(
-              "test_joint_1",
-              "test_joint_2",
-          ),
-          inference_mode=constants.InferenceMode.SYNCHRONOUS,
-      )
-      self.assertIsInstance(
-          policy._client, gemini_robotics_policy.genai_robotics.Client
-      )
-
   def test_raise_error_if_step_spec_not_called(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
 
+    with mock.patch.object(remote_model_interface, "RemoteModelInterface"):
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
           task_instruction_key="test_task_instruction",
@@ -135,11 +101,11 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
   def test_spec_validates_timestep_spec(
       self, timestep_spec: gdmr_types.TimeStepSpec
   ):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
@@ -151,20 +117,19 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       )
 
       # Action is size 2, with chunk of size 3.
-      mock_query_model = mock.MagicMock(
-          return_value=np.array([[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]])
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
       )
-      policy._query_model = mock_query_model
 
       with self.assertRaises(ValueError):
         policy.step_spec(timestep_spec)
 
   def test_step_spec(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
@@ -176,10 +141,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       )
 
       # Action is size 2, with chunk of size 3.
-      mock_query_model = mock.MagicMock(
-          return_value=np.array([[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]])
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
       )
-      policy._query_model = mock_query_model
 
       timestep_spec = gdmr_types.TimeStepSpec(
           step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -203,11 +167,11 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       )
 
   def test_step_spec_with_additional_observations(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       mock_provider_1 = mock.create_autospec(
           additional_observations_provider.AdditionalObservationsProvider
@@ -233,10 +197,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       )
 
       # Action is size 2, with chunk of size 3.
-      mock_query_model = mock.MagicMock(
-          return_value=np.array([[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]])
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0, 2.0], [2.0, 3.0], [3.0, 4.0]]
       )
-      policy._query_model = mock_query_model
 
       timestep_spec = gdmr_types.TimeStepSpec(
           step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -248,6 +211,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
               "test_instruction_key": specs.StringArray(()),
           },
       )
+
       policy.step_spec(timestep_spec)
 
       timestep_spec_after_call = policy._timestep_spec
@@ -264,11 +228,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       )
 
   def test_step_spec_with_additional_observations_to_ensure_spec_is_added(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ):
 
       mock_provider_1 = mock.create_autospec(
           additional_observations_provider.AdditionalObservationsProvider
@@ -296,11 +258,11 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       self.assertIn("additional_obs_2", policy._string_observations_keys)
 
   def test_step_with_additional_observations_provider(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       mock_provider_1 = mock.create_autospec(
           additional_observations_provider.AdditionalObservationsProvider
@@ -331,14 +293,8 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           additional_observations_providers=[mock_provider_1, mock_provider_2],
       )
 
-      returned_action = np.array([[1.0], [2.0], [3.0]])
-      encoded_response = mock.MagicMock()
-      encoded_response.text = json.dumps(
-          {"action_chunk": returned_action.tolist()}
-      )
-
-      policy._client.models.generate_content = mock.MagicMock(
-          return_value=encoded_response
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0], [2.0], [3.0]]
       )
 
       timestep_spec = gdmr_types.TimeStepSpec(
@@ -409,11 +365,13 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
       self.assertEqual(action, [1.0])
 
   def test_step_policy(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface,
+        "RemoteModelInterface",
+        autospec=True,
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
@@ -424,14 +382,8 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           inference_mode=constants.InferenceMode.SYNCHRONOUS,
       )
 
-      returned_action = np.array([[1.0], [2.0], [3.0]])
-      encoded_response = mock.MagicMock()
-      encoded_response.text = json.dumps(
-          {"action_chunk": returned_action.tolist()}
-      )
-
-      policy._client.models.generate_content = mock.MagicMock(
-          return_value=encoded_response
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0], [2.0], [3.0]]
       )
 
       timestep_spec = gdmr_types.TimeStepSpec(
@@ -455,92 +407,54 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           ),
       }
 
-      expected_contents = {}
-      expected_contents[constants.TASK_INSTRUCTION_ENCODED_OBS_KEY] = (
-          "test_task_instruction"
-      )
-      expected_contents["test_joint_1"] = np.array([0.0]).tolist()
-      expected_contents[
-          f"{constants.IMAGE_ENCODED_OBS_PREFIX}test_camera_1"
-      ] = 0
+      # This resets the count of calls to query_model.
+      remote_model_mock.query_model.reset_mock()
 
-      policy._client.models.generate_content.reset_mock()
       # First step, should trigger a query.
       (action, unused_extra), policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
 
-      policy._client.models.generate_content.assert_called_once()
-      _, call_kwargs = policy._client.models.generate_content.call_args
+      remote_model_mock.query_model.assert_called_once()
+      call_args, _ = remote_model_mock.query_model.call_args
+      model_observation = call_args[0]
 
-      # The contents data structure is complex and direct assertion does not
-      # work. Assert on the single components.
-      self.assertEqual(call_kwargs["model"], "test_serve_id")
-      call_contents = call_kwargs["contents"]
-      self.assertLen(call_contents, 2)
-      np.testing.assert_equal(
-          call_contents[0], np.zeros((100, 100, 3), dtype=np.uint8)
-      )
-      self.assertEqual(call_contents[1], json.dumps(expected_contents))
+      np.testing.assert_equal(model_observation, observation)
+      np.testing.assert_equal(action, [1.0])
 
-      self.assertEqual(action, [1.0])
-      policy._client.models.generate_content.reset_mock()
+      remote_model_mock.query_model.reset_mock()
 
       # Second step, should not trigger a query.
       (action, unused_extra), policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      self.assertEqual(action, [2.0])
-      policy._client.models.generate_content.assert_not_called()
+      np.testing.assert_equal(action, [2.0])
+      remote_model_mock.query_model.assert_not_called()
 
       # Third step, should not trigger a query.
       (action, unused_extra), policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      policy._client.models.generate_content.assert_not_called()
+      remote_model_mock.query_model.assert_not_called()
 
-      self.assertEqual(action, [3.0])
+      np.testing.assert_equal(action, [3.0])
       # Fourth step, should trigger a query.
       (action, unused_extra), unused_policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      self.assertEqual(action, [1.0])
-      policy._client.models.generate_content.assert_called_once()
-
-  def test_initialize_async_policy(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
-
-      policy = gemini_robotics_policy.GeminiRoboticsPolicy(
-          serve_id="test_serve_id",
-          task_instruction_key="test_instruction_key",
-          image_observation_keys=(
-              "test_camera_1",
-              "test_camera_2",
-          ),
-          proprioceptive_observation_keys=(
-              "test_joint_1",
-              "test_joint_2",
-          ),
-          inference_mode=constants.InferenceMode.ASYNCHRONOUS,
-      )
-      self.assertIsInstance(
-          policy._client, gemini_robotics_policy.genai_robotics.Client
-      )
+      np.testing.assert_equal(action, [1.0])
+      remote_model_mock.query_model.assert_called_once()
 
   def test_step_async_policy(self):
-    FLAGS.api_key = "mock_test_key"
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
@@ -551,14 +465,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           inference_mode=constants.InferenceMode.ASYNCHRONOUS,
       )
 
-      returned_action = np.array([[1.0], [2.0], [3.0]])
-      encoded_response = mock.MagicMock()
-      encoded_response.text = json.dumps(
-          {"action_chunk": returned_action.tolist()}
-      )
-
-      policy._client.models.generate_content = mock.MagicMock(
-          return_value=encoded_response
+      # Action is size 2, with chunk of size 3.
+      remote_model_mock.query_model.return_value = np.array(
+          [[1.0], [2.0], [3.0]]
       )
 
       timestep_spec = gdmr_types.TimeStepSpec(
@@ -583,16 +492,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           ),
       }
 
-      expected_contents = {}
-      expected_contents[constants.TASK_INSTRUCTION_ENCODED_OBS_KEY] = (
-          "test_task_instruction"
-      )
-      expected_contents["test_joint_1"] = np.array([0.0]).tolist()
-      expected_contents[
-          f"{constants.IMAGE_ENCODED_OBS_PREFIX}test_camera_1"
-      ] = 0
-
-      policy._client.models.generate_content.reset_mock()
+      remote_model_mock.query_model.reset_mock()
 
       # First step, should trigger a query.
       (action, unused_extra), policy_state = policy.step(
@@ -600,55 +500,45 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           policy_state,
       )
 
-      policy._client.models.generate_content.assert_called_once()
-      _, call_kwargs = policy._client.models.generate_content.call_args
+      remote_model_mock.query_model.assert_called_once()
+      call_args, _ = remote_model_mock.query_model.call_args
+      model_observation = call_args[0]
 
-      # The contents data structure is complex and direct assertion does not
-      # work. Assert on the single components.
-      self.assertEqual(call_kwargs["model"], "test_serve_id")
-      call_contents = call_kwargs["contents"]
-      self.assertLen(call_contents, 2)
-      np.testing.assert_equal(
-          call_contents[0], np.zeros((100, 100, 3), dtype=np.uint8)
-      )
-      self.assertEqual(call_contents[1], json.dumps(expected_contents))
+      np.testing.assert_equal(model_observation, observation)
 
-      self.assertEqual(action, [1.0])
-      policy._client.models.generate_content.reset_mock()
+      np.testing.assert_equal(action, [1.0])
+      remote_model_mock.query_model.reset_mock()
 
       # Second step, should not trigger a query.
       (action, unused_extra), policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      self.assertEqual(action, [2.0])
-      policy._client.models.generate_content.assert_not_called()
+      np.testing.assert_equal(action, [2.0])
+      remote_model_mock.query_model.assert_not_called()
 
       # Third step, should not trigger a query.
       (action, unused_extra), policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      self.assertEqual(action, [3.0])
-      policy._client.models.generate_content.assert_not_called()
+      np.testing.assert_equal(action, [3.0])
+      remote_model_mock.query_model.assert_not_called()
 
       # Fourth step, should trigger a query.
       (action, unused_extra), unused_policy_state = policy.step(
           dm_env.transition(reward=0.0, discount=1.0, observation=observation),
           policy_state,
       )
-      self.assertEqual(action, [1.0])
-      policy._client.models.generate_content.assert_called_once()
+      np.testing.assert_equal(action, [1.0])
+      remote_model_mock.query_model.assert_called_once()
 
-  # TODO: Remove this testwhen this is fixed.
-  def test_local_policy_calls_reset_method(self):
-    FLAGS.api_key = "mock_test_key"
-    FLAGS.safari_enable_server_init = True
-
-    with mock.patch("googleapiclient.discovery.build") as mock_build:
-      mock_resource = mock.MagicMock()
-      mock_resource.modelServing.return_value = mock.MagicMock()
-      mock_build.return_value = mock_resource
+  def test_model_action_not_2d_raises_error(self):
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      # We mock the class so we need to get the mock instance.
+      remote_model_mock = remote_model_mock_class.return_value
 
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           serve_id="test_serve_id",
@@ -657,23 +547,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           proprioceptive_observation_keys=("test_joint_1",),
           min_replan_interval=3,
           inference_mode=constants.InferenceMode.SYNCHRONOUS,
-          robotics_api_connection=constants.RoboticsApiConnectionType.LOCAL,
       )
 
-      self.assertIsNotNone(policy._initial_state_method)
-
-      # Now overwrite the initial_state method with a mock.
-      policy._initial_state_method = mock.MagicMock()
-
-      returned_action = np.array([[1.0], [2.0], [3.0]])
-      encoded_response = mock.MagicMock()
-      encoded_response.text = json.dumps(
-          {"action_chunk": returned_action.tolist()}
-      )
-
-      policy._client.models.generate_content = mock.MagicMock(
-          return_value=encoded_response
-      )
+      remote_model_mock.query_model.return_value = np.array([1.0, 2.0])
 
       timestep_spec = gdmr_types.TimeStepSpec(
           step_type=gdmr_types.STEP_TYPE_SPEC,
@@ -685,10 +561,154 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
               "test_instruction_key": specs.StringArray(()),
           },
       )
-      policy.step_spec(timestep_spec)
+      with self.assertRaisesRegex(
+          ValueError,
+          "Action returned by the model must be a 2D array",
+      ):
+        policy.step_spec(timestep_spec)
 
-      policy.initial_state()
-      policy._initial_state_method.assert_called_once()
+  @parameterized.named_parameters(
+      (
+          "action_conditioning_chunk_length_none",
+          None,
+          [[2.0], [3.0], [4.0], [5.0]],
+      ),
+      (
+          "action_conditioning_chunk_length_smaller_than_actions_left",
+          1,
+          [[2.0]],
+      ),
+  )
+  def test_step_async_policy_with_action_conditioning_chunk_length(
+      self, action_conditioning_chunk_length, expected_conditioning_chunk
+  ):
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      remote_model_mock = remote_model_mock_class.return_value
+      policy = gemini_robotics_policy.GeminiRoboticsPolicy(
+          serve_id="test_serve_id",
+          task_instruction_key="test_instruction_key",
+          image_observation_keys=("test_camera_1",),
+          proprioceptive_observation_keys=("test_joint_1",),
+          min_replan_interval=1,
+          inference_mode=constants.InferenceMode.ASYNCHRONOUS,
+          action_conditioning_chunk_length=action_conditioning_chunk_length,
+      )
+
+      # Action chunk is size 5.
+      actions = np.array([[1.0], [2.0], [3.0], [4.0], [5.0]])
+      remote_model_mock.query_model.return_value = actions
+
+      timestep_spec = gdmr_types.TimeStepSpec(
+          step_type=gdmr_types.STEP_TYPE_SPEC,
+          reward={},
+          discount={},
+          observation={
+              "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
+              "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
+              "test_instruction_key": specs.StringArray(()),
+          },
+      )
+
+      policy.step_spec(timestep_spec)
+      policy_state = policy.initial_state()
+
+      observation = {
+          "test_camera_1": np.zeros((100, 100, 3), dtype=np.uint8),
+          "test_joint_1": np.array([0.0]),
+          "test_instruction_key": np.array(
+              "test_task_instruction", dtype=np.object_
+          ),
+      }
+
+      remote_model_mock.query_model.reset_mock()
+
+      # First step.
+      # Buffer is empty.
+      # Should call query_model.
+      # Returns [1, 2, 3].
+      # Consumes [1]. Buffer: [2, 3].
+      (action, unused_extra), policy_state = policy.step(
+          dm_env.transition(reward=0.0, discount=1.0, observation=observation),
+          policy_state,
+      )
+      remote_model_mock.query_model.assert_called_once()
+      call_args, _ = remote_model_mock.query_model.call_args
+      model_observation = call_args[0]
+      np.testing.assert_equal(model_observation, observation)
+      np.testing.assert_equal(action, [1.0])
+      remote_model_mock.query_model.reset_mock()
+
+      # Second step.
+      # Buffer: [2, 3].
+      # actions_left = 2.
+      # min_replan = 1.
+      # num_per_req = 3.
+      # actions_executed_during_inference = 1
+      # _should_replan logic:
+      #  actions_left = self._model_output.shape[0] -> 2.
+      #  3 - 2 = 1.
+      #  1 >= 1. True.
+      # Triggers new query (async).
+      (action, unused_extra), _ = policy.step(
+          dm_env.transition(reward=0.0, discount=1.0, observation=observation),
+          policy_state,
+      )
+      # Action is the first element of the buffer: [2].
+      np.testing.assert_equal(action, [2.0])
+      # Wait for async execution by checking the future.
+      # The policy should have submitted a future.
+      self.assertIsNotNone(policy._future)
+      policy._future.result()  # pytype: disable=attribute-error
+
+      remote_model_mock.query_model.assert_called_once()
+      call_args_2 = remote_model_mock.query_model.call_args_list[0]
+      obs_2 = call_args_2[0][0]
+
+      conditioning = obs_2.get(constants.CONDITIONING_ENCODED_OBS_KEY)
+      self.assertIsNotNone(conditioning)
+
+      # Conditioning should match expected.
+      np.testing.assert_allclose(conditioning, expected_conditioning_chunk)
+
+  def test_action_conditioning_chunk_length_validation(self):
+    with mock.patch.object(
+        remote_model_interface, "RemoteModelInterface", autospec=True
+    ) as remote_model_mock_class:
+      remote_model_mock = remote_model_mock_class.return_value
+
+      # min_replan_interval=2, chunk_length=2. Sum = 4.
+      # returns actions size 3. 3 <= 4. Should raise ValueError.
+      policy = gemini_robotics_policy.GeminiRoboticsPolicy(
+          serve_id="test_serve_id",
+          task_instruction_key="test_instruction_key",
+          image_observation_keys=("test_camera_1",),
+          proprioceptive_observation_keys=("test_joint_1",),
+          min_replan_interval=2,
+          inference_mode=constants.InferenceMode.ASYNCHRONOUS,
+          action_conditioning_chunk_length=2,
+      )
+
+      # Action is size 3.
+      actions = np.array([[1.0], [2.0], [3.0]])
+      remote_model_mock.query_model.return_value = actions
+
+      timestep_spec = gdmr_types.TimeStepSpec(
+          step_type=gdmr_types.STEP_TYPE_SPEC,
+          reward={},
+          discount={},
+          observation={
+              "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
+              "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
+              "test_instruction_key": specs.StringArray(()),
+          },
+      )
+
+      with self.assertRaises(
+          ValueError,
+      ):
+        policy.step_spec(timestep_spec)
 
 
 if __name__ == "__main__":

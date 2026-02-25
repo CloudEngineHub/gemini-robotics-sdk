@@ -21,6 +21,7 @@ from safari_sdk.logging.python import constants
 from safari_sdk.logging.python import metadata_utils
 from safari_sdk.protos.logging import codec_pb2
 from safari_sdk.protos.logging import dtype_pb2
+from safari_sdk.protos.logging import policy_type_pb2
 
 
 class MetadataUtilsTest(parameterized.TestCase):
@@ -168,7 +169,7 @@ class MetadataUtilsTest(parameterized.TestCase):
     params = metadata_utils.PolicyEnvironmentMetadataParams(
         jpeg_compression_keys=["observation1"],
         observation_spec={
-            "observation1": specs.Array(shape=(1, 2, 3), dtype=np.float32),
+            "observation1": specs.Array(shape=(1, 2, 3), dtype=np.uint8),
             "observation2": specs.Array(shape=(4, 5), dtype=np.int32),
         },
         reward_spec=specs.Array(shape=(), dtype=np.float32),
@@ -183,11 +184,12 @@ class MetadataUtilsTest(parameterized.TestCase):
             "extra1": specs.Array(shape=(1, 2, 3), dtype=np.float32),
             "extra2": specs.Array(shape=(4, 5), dtype=np.int32),
         },
+        policy_type=policy_type_pb2.POLICY_TYPE_ROBOT_EVALUATION,
+        control_timestep=0.04,
+        embodiment_version="v1",
     )
 
     spec_proto = metadata_utils.create_feature_specs_proto(params)
-
-    print(spec_proto)
 
     self.assertSequenceEqual(
         spec_proto.observation[
@@ -199,7 +201,7 @@ class MetadataUtilsTest(parameterized.TestCase):
         spec_proto.observation[
             constants.OBSERVATION_KEY_TEMPLATE.format("observation1")
         ].dtype,
-        dtype_pb2.DTYPE_FLOAT32,
+        dtype_pb2.DTYPE_UINT8,
     )
     self.assertEqual(
         spec_proto.observation[
@@ -316,6 +318,9 @@ class MetadataUtilsTest(parameterized.TestCase):
         policy_extra_spec={
             "extra1": specs.Array(shape=(1, 2, 3), dtype=np.float32),
         },
+        policy_type=policy_type_pb2.POLICY_TYPE_ROBOT_TELEOPERATION,
+        control_timestep=0.04,
+        embodiment_version="v1",
     )
     spec_proto = metadata_utils.create_feature_specs_proto(params)
 
@@ -361,7 +366,6 @@ class MetadataUtilsTest(parameterized.TestCase):
         spec_proto.action[constants.ACTION_KEY_PREFIX].shape,
         [1, 2, 3],
     )
-
 
 if __name__ == "__main__":
   absltest.main()

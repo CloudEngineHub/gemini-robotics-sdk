@@ -80,7 +80,12 @@ class OrchestratorRobotJob:
     if self._current_robot_job is None:
       return _RESPONSE(error_message=_ERROR_ROBOT_JOB_NOT_ACQUIRED)
     else:
-      return _RESPONSE(success=True, robot_job=self._current_robot_job)
+      return _RESPONSE(
+          success=True,
+          robot_job=self._current_robot_job,
+          robot_job_id=self._current_robot_job.robotJobId,
+          launch_command=self._current_robot_job.launchCommand,
+      )
 
   def request_robot_job(self) -> _RESPONSE:
     """Request orchestrator server for next available robot job to execute."""
@@ -129,4 +134,5 @@ class OrchestratorRobotJob:
         success=True,
         robot_id=self._robot_id,
         robot_job_id=self._current_robot_job.robotJobId,
+        launch_command=self._current_robot_job.launchCommand,
     )

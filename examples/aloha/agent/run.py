@@ -18,10 +18,16 @@ Entry point for running various Aloha agent implementations. Select an agent
 by passing the --agent_name flag.
 
 Available agents:
+  - run_for_duration_agent: Unified agent (use --use_streaming=False for
+  non-streaming)
   - simple_agent: Basic Aloha agent
 
 Example:
-  python run.py --agent_name=simple_agent
+  # Streaming mode (default)
+  python run.py --agent_name=run_for_duration_agent
+
+  # Non-streaming mode
+  python run.py --agent_name=run_for_duration_agent --use_streaming=False
 """
 
 import asyncio
@@ -31,6 +37,7 @@ from absl import app
 from absl import flags
 from absl import logging
 
+import run_for_duration_agent
 import simple_agent
 from safari_sdk.agent.framework import agent_framework
 from safari_sdk.agent.framework import config as framework_config
@@ -39,16 +46,35 @@ from safari_sdk.agent.framework.event_bus import event_bus
 
 def main(_) -> None:
   config = framework_config.AgentFrameworkConfig.create()
+  logging.info(
+      "Config created: agent_name=%s, api_key=%s, model_name=%s",
+      config.agent_name,
+      "SET" if config.api_key else "NOT SET",
+      config.agent_model_name,
+  )
   bus = event_bus.EventBus(config=config)
+
+  agent_instance = None
   match config.agent_name:
+    case "aloha_agent" | "run_for_duration_agent":
+      agent_instance = run_for_duration_agent.AlohaAgent(
+          bus=bus,
+          config=config,
+          use_streaming=config.use_streaming,
+      )
+      logging.info(
+          "Creating AlohaAgent in %s mode",
+          "streaming" if config.use_streaming else "non-streaming",
+      )
     case "simple_agent":
-      agent_cls = simple_agent.SimpleAlohaAgent
+      agent_instance = simple_agent.SimpleAlohaAgent(
+          bus=bus,
+          config=config,
+      )
     case _:
       raise ValueError("Unsupported agent name: %s" % config.agent_name)
-  agent_instance = agent_cls(
-      bus=bus,
-      config=config,
-  )
+
+  logging.info("Creating agent: %s", type(agent_instance).__name__)
 
   framework = agent_framework.AgentFramework(
       bus=bus,

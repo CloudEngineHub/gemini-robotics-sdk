@@ -18,6 +18,7 @@ import copy
 import datetime
 import json
 import os
+import pathlib
 import re
 import subprocess
 import sys
@@ -45,6 +46,10 @@ _COMMANDS_LIST = [
     "upload_data",
     "version",
 ]
+
+_UPLOAD_DATA_ROBOT_ID_REGEX = re.compile(r"[a-zA-Z][\w-]{0,62}")
+# The constraints for artifact IDs come from the backend proto definition.
+_ARTIFACT_ID_REGEX = re.compile(r"^[a-zA-Z0-9][\w-]{1,35}$")
 
 # Mapping from recipe name to training type.
 _RECIPE_TO_TYPE_MAP = {
@@ -106,11 +111,16 @@ _ROBOT_ID = flags.DEFINE_list(
 _START_DATE = flags.DEFINE_string(
     name="start_date",
     default=None,
-    help="The start date to use. Format: YYYYMMDD.",
+    help="The start date (inclusive) for training data. Format: YYYYMMDD.",
 )
 
 _END_DATE = flags.DEFINE_string(
-    name="end_date", default=None, help="The end date to use. Format: YYYYMMDD."
+    name="end_date",
+    default=None,
+    help=(
+        "The end date (inclusive) for training data. Format: YYYYMMDD."
+        " Can be the same as start_date to train on a single day."
+    ),
 )
 
 _MAX_TRAINING_STEPS = flags.DEFINE_integer(
@@ -169,8 +179,18 @@ _UPLOAD_DATA_API_ENDPOINT = flags.DEFINE_string(
 _UPLOAD_DATA_ROBOT_ID = flags.DEFINE_string(
     "upload_data_robot_id",
     None,
-    "Typically the identifier of the robot or human collector. Alphanumeric "
-    "and fewer than 60 characters.",
+    "Typically the identifier of the robot or human collector. Must start with"
+    " a letter and contain only letters, numbers, dashes, and underscores. Must"
+    " be 63 characters or fewer.",
+)
+flags.register_validator(
+    "upload_data_robot_id",
+    lambda value: value is None or _UPLOAD_DATA_ROBOT_ID_REGEX.fullmatch(value),
+    message=(
+        "--upload_data_robot_id must start with a letter and contain only"
+        " alphanumeric characters, underscores, or dashes, and must be at most"
+        " 63 characters long."
+    ),
 )
 
 _UPLOAD_DATA_DIRECTORY = flags.DEFINE_string(
@@ -200,6 +220,12 @@ Commands:
     --start_date: The start date to use. Format: YYYYMMDD.
     --end_date: The end date to use. Format: YYYYMMDD.
     --training_recipe: The training recipe to use, one of [{', '.join(_RECIPE_TO_TYPE_MAP.keys())}]
+  For gemini_robotics_on_device_v1 recipe, the following flags are also available:
+     --max_training_steps: The maximum number of training steps to use. (Optional)
+     --checkpoint_every_n_steps: The number of steps to checkpoint. If not set, the default is max_training_steps / 5. (Optional)
+     --checkpoint_type: The checkpoint type to use, one of [{', '.join(_CHECKPOINT_TYPE_MAP.keys())}] (Optional)
+     --image_keys: The image keys to use for training. (Optional)
+     --proprioception_keys: The proprioception keys to use for training. (Optional)
 
   data_stats: Show data stats currently available for training.
 
@@ -216,6 +242,11 @@ Commands:
       --model_checkpoint_path: The local gemini_robotics_on_device model
         checkpoint path to use if you have downloaded the checkpoint and saved
         it locally. (Optional)
+      --serve_port: The port to use for serving. (Optional)
+      --gpu_mem_fraction: The GPU memory fraction to use for serving. (Optional)
+      --use_cpu: Whether to use CPU for serving. If False, GPU will be used. (Optional)
+      --image_keys: The image keys to use for serving. (Optional)
+      --proprioception_keys: The proprioception keys to use for serving. (Optional)
 
       This will download the model and start a serving docker container.
 
@@ -420,11 +451,12 @@ class FlywheelCli:
     if _MODEL_CHECKPOINT_PATH.value is None:
       if _TRAINING_JOB_ID.value is None:
         print("No training job id provided. Using the base model checkpoint...")
-        flags.FLAGS.set_default("training_job_id", "grod_chkpt_aloha_v1")
+        flags.FLAGS.set_default("training_job_id", "grod-chkpt-aloha-v1")
 
       checkpoint_path = self.handle_download_training_artifacts()
     else:
       checkpoint_path = _MODEL_CHECKPOINT_PATH.value
+    checkpoint_path = os.path.abspath(checkpoint_path)
     file_dir = os.path.dirname(checkpoint_path)
     file_name = os.path.basename(checkpoint_path)
     try:
@@ -550,16 +582,20 @@ class FlywheelCli:
           print("Invalid artifact number.")
           return
         selected_name = artifact_names[artifact_number]
-        default_file_name = os.path.join(
+        default_basename = (
+            f"{_TRAINING_JOB_ID.value}_{selected_name}.chkpt".replace(
+                ".chkpt.chkpt", ".chkpt"
+            )
+        )
+        default_full_path = os.path.join(
             tempfile.gettempdir(),
             "grod",
-            f"{_TRAINING_JOB_ID.value}_{selected_name}.chkpt",
-        ).replace(".chkpt.chkpt", ".chkpt")
-        file_name = input(
-            f"> Save artifact as (default: {default_file_name}): "
+            default_basename,
         )
-        if not file_name:
-          file_name = default_file_name
+        file_name = input(
+            f"> Save artifact as (default: {default_full_path}): "
+        )
+        file_name = _resolve_download_path(file_name, default_full_path)
         if os.path.exists(file_name):
           overwrite = input(f"> File '{file_name}' exists. Overwrite? (y/n): ")
           if overwrite.lower() != "y":
@@ -592,11 +628,11 @@ class FlywheelCli:
       return
 
     container_dir = os.path.join(tempfile.gettempdir(), "grod")
-    default_filename = os.path.join(container_dir, f"{_ARTIFACT_ID.value}.tar")
-    filename = input(f"\n> Save artifact as (default: {default_filename}): ")
+    default_basename = f"{_ARTIFACT_ID.value}.tar"
+    default_full_path = os.path.join(container_dir, default_basename)
+    filename = input(f"\n> Save artifact as (default: {default_full_path}): ")
     print(f"Filename: {filename}")
-    if not filename:
-      filename = default_filename
+    filename = _resolve_download_path(filename, default_full_path)
     _download_url_to_file(uri, filename)
 
     if "docker" in _ARTIFACT_ID.value:
@@ -645,8 +681,8 @@ class FlywheelCli:
             _START_DATE.value, _END_DATE.value
         ):
           raise ValueError(
-              "Start date must be before or equal to end date. Start date:"
-              f" {_START_DATE.value} End date: {_END_DATE.value}"
+              "Start date must be before or equal to end date."
+              f" Start date: {_START_DATE.value} End date: {_END_DATE.value}"
           )
         self.handle_train()
       case "serve":
@@ -686,6 +722,12 @@ class FlywheelCli:
         if _TRAINING_JOB_ID.value:
           self.handle_download_training_artifacts()
         elif _ARTIFACT_ID.value:
+          if not _ARTIFACT_ID_REGEX.fullmatch(_ARTIFACT_ID.value):
+            raise ValueError(
+                f"Invalid artifact_id. Must start with alphanumeric, contain "
+                f"only alphanumeric characters, underscores, or hyphens, and "
+                f"be 2-36 characters long. Got: {_ARTIFACT_ID.value}"
+            )
           self.handle_download_artifact_id()
         else:
           raise ValueError(
@@ -760,6 +802,40 @@ def _download_url_to_file(url: str, filename: str) -> None:
     print("Download complete!")
   except urllib.error.URLError as e:
     print(f"\n[ERROR] Error downloading artifact {url}: {e}")
+
+
+def _resolve_download_path(
+    user_input_path: str | None, default_full_path: str
+) -> str:
+  """Resolves and validates a download destination path.
+
+  Handles tilde expansion and directory paths by appending the basename of
+  the default_full_path.
+
+  Args:
+    user_input_path: The path provided by the user. If None or empty, returns
+      default_full_path.
+    default_full_path: The full path to use if user_input_path is empty or if
+      user_input_path is a directory.
+
+  Returns:
+    Absolute path string.
+  """
+  # Handle empty input by using the default full path.
+  if not user_input_path:
+    return default_full_path
+
+  # Expand ~ to user's home directory.
+  resolved_path = pathlib.Path(user_input_path).expanduser()
+
+  # Check if path is an existing directory.
+  if resolved_path.is_dir():
+    # Append the basename of the default file path to the directory.
+    default_basename = os.path.basename(default_full_path)
+    resolved_path = resolved_path / default_basename
+
+  # Return as string for compatibility with other libraries (e.g., urllib).
+  return str(resolved_path)
 
 
 def _is_valid_date(date: str) -> bool:

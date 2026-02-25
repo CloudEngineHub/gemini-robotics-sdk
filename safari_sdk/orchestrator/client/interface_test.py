@@ -29,9 +29,11 @@ class InterfaceTest(absltest.TestCase):
 
   @mock.patch(
       "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
-      return_value=interface.current_robot._RESPONSE(success=True),
+      return_value=interface.current_robot._RESPONSE(
+          success=True, robot_id="test_robot_id"
+      ),
   )
-  def test_connect_good(self, *_):
+  def test_connect_robot_id_good(self, *_):
     FLAGS.api_key = "mock_test_key"
     interface_lib = interface.OrchestratorInterface(
         robot_id="test_robot_id",
@@ -44,6 +46,29 @@ class InterfaceTest(absltest.TestCase):
       )
       response = interface_lib.connect()
       self.assertTrue(response.success)
+      self.assertEqual(response.robot_id, "test_robot_id")
+
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
+      return_value=interface.current_robot._RESPONSE(
+          success=True, robot_id="test_robot_id"
+      ),
+  )
+  def test_connect_hostname_good(self, *_):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="",
+        hostname="test_hostname",
+        job_type=interface.JOB_TYPE.ALL,
+    )
+
+    with mock.patch("googleapiclient.discovery.build") as mock_build:
+      mock_build.return_value = mock.Mock(
+          spec=interface.auth.discovery.Resource
+      )
+      response = interface_lib.connect()
+      self.assertTrue(response.success)
+      self.assertEqual(response.robot_id, "test_robot_id")
 
   def test_connect_bad_connect(self):
     FLAGS.api_key = None
@@ -65,7 +90,7 @@ class InterfaceTest(absltest.TestCase):
           error_message="Mock validation error.",
       ),
   )
-  def test_connect_bad_validation(self, *_):
+  def test_connect_bad_validation_robot_id(self, *_):
     FLAGS.api_key = "mock_test_key"
     interface_lib = interface.OrchestratorInterface(
         robot_id="test_robot_id",
@@ -82,6 +107,85 @@ class InterfaceTest(absltest.TestCase):
           response.error_message,
           "Failed to validate connection to orchestrator server with"
           " test_robot_id. Validation failed with error: Mock validation"
+          " error.",
+      )
+
+    self.assertIsNone(interface_lib._connection)
+    self.assertIsNone(interface_lib._robot_job_lib)
+    self.assertIsNone(interface_lib._robot_job_work_unit_lib)
+    self.assertIsNone(interface_lib._artifact_lib)
+
+  def test_observer_mode_restrictions(self):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+        observer_mode=True,
+    )
+    interface_lib._connection = mock.Mock(
+        spec=interface.auth.discovery.Resource
+    )
+    interface_lib._current_robot_lib = mock.MagicMock(
+        spec=interface.current_robot.OrchestratorCurrentRobotInfo
+    )
+    interface_lib._robot_job_lib = mock.MagicMock(
+        spec=interface.robot_job.OrchestratorRobotJob
+    )
+    interface_lib._robot_job_work_unit_lib = mock.MagicMock(
+        spec=interface.robot_job_work_unit.OrchestratorRobotJobWorkUnit
+    )
+
+    response = interface_lib.set_current_robot_operator_id(
+        operator_id="test_operator_id"
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_IN_OBSERVER_MODE
+    )
+
+    response = interface_lib.add_operator_event(
+        operator_event_str="Other Break",
+        operator_id="test_operator_id",
+        event_timestamp=123456789,
+        resetter_id="test_resetter_id",
+        event_note="test_event_note",
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_IN_OBSERVER_MODE
+    )
+
+    response = interface_lib.request_robot_job_work_unit()
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_IN_OBSERVER_MODE
+    )
+
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
+      return_value=interface.current_robot._RESPONSE(
+          success=False,
+          error_message="Mock validation error.",
+      ),
+  )
+  def test_connect_bad_validation_hostname(self, *_):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="",
+        hostname="test_hostname",
+        job_type=interface.JOB_TYPE.EVALUATION,
+    )
+
+    with mock.patch("googleapiclient.discovery.build") as mock_build:
+      mock_build.return_value = mock.Mock(
+          spec=interface.auth.discovery.Resource
+      )
+      response = interface_lib.connect()
+      self.assertFalse(response.success)
+      self.assertEqual(
+          response.error_message,
+          "Failed to validate connection to orchestrator server with"
+          " test_hostname. Validation failed with error: Mock validation"
           " error.",
       )
 
@@ -334,6 +438,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
       ),
   )
   @mock.patch(
@@ -342,6 +447,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -367,6 +473,7 @@ class InterfaceTest(absltest.TestCase):
     self.assertTrue(response.success)
     self.assertEqual(response.robot_id, "test_robot_id")
     self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.launch_command, "test_launch_command")
     self.assertEqual(response.work_unit_id, "test_work_unit_id")
     self.assertIsInstance(
         response.work_unit, interface.robot_job_work_unit.work_unit.WorkUnit
@@ -489,6 +596,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
       ),
   )
   @mock.patch(
@@ -497,6 +605,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -522,6 +631,7 @@ class InterfaceTest(absltest.TestCase):
     self.assertTrue(response.success)
     self.assertEqual(response.robot_id, "test_robot_id")
     self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.launch_command, "test_launch_command")
     self.assertEqual(response.work_unit_id, "test_work_unit_id")
     self.assertIsInstance(
         response.work_unit, interface.robot_job_work_unit.work_unit.WorkUnit
@@ -585,6 +695,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -660,6 +771,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -743,6 +855,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -780,6 +893,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -821,6 +935,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -888,6 +1003,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -968,6 +1084,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -1056,6 +1173,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -1095,6 +1213,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -1138,6 +1257,7 @@ class InterfaceTest(absltest.TestCase):
           success=True,
           robot_id="test_robot_id",
           robot_job_id="test_robot_job_id",
+          launch_command="test_launch_command",
           work_unit_id="test_work_unit_id",
           work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
               robotJobId="test_robot_job_id",
@@ -2262,6 +2382,128 @@ class InterfaceTest(absltest.TestCase):
       ),
   )
   @mock.patch(
+      "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
+      return_value=interface.current_robot._RESPONSE(success=True),
+  )
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.robot_job.OrchestratorRobotJob.request_robot_job",
+      return_value=interface.robot_job_work_unit._RESPONSE(
+          success=True,
+          robot_id="test_robot_id",
+          robot_job_id="test_robot_job_id",
+      ),
+  )
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.robot_job_work_unit.OrchestratorRobotJobWorkUnit.insert_session_info",
+      return_value=interface.robot_job_work_unit._RESPONSE(
+          success=True,
+          robot_id="test_robot_id",
+          robot_job_id="test_robot_job_id",
+          work_unit_id="test_work_unit_id",
+          work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
+              robotJobId="test_robot_job_id",
+              workUnitId="test_work_unit_id",
+          ),
+      ),
+  )
+  def test_robot_job_work_unit_insert_session_info_good(self, *_):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+    )
+
+    with mock.patch("googleapiclient.discovery.build") as mock_build:
+      mock_build.return_value = mock.Mock(
+          spec=interface.auth.discovery.Resource
+      )
+      response = interface_lib.connect()
+      self.assertTrue(response.success)
+
+    response = interface_lib.robot_job_work_unit_insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
+    self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.work_unit_id, "test_work_unit_id")
+    self.assertIsInstance(
+        response.work_unit, interface.robot_job_work_unit.work_unit.WorkUnit
+    )
+
+  def test_robot_job_work_unit_insert_session_info_bad_active_connection(self):
+    FLAGS.api_key = None
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+    )
+    interface_lib._connection = None
+    interface_lib._robot_job_lib = mock.MagicMock(
+        spec=interface.robot_job.OrchestratorRobotJob
+    )
+    interface_lib._robot_job_work_unit_lib = mock.MagicMock(
+        spec=interface.robot_job_work_unit.OrchestratorRobotJobWorkUnit
+    )
+
+    response = interface_lib.robot_job_work_unit_insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+    interface_lib._connection = mock.Mock(
+        spec=interface.auth.discovery.Resource
+    )
+    interface_lib._robot_job_lib = None
+    interface_lib._robot_job_work_unit_lib = mock.MagicMock(
+        spec=interface.robot_job_work_unit.OrchestratorRobotJobWorkUnit
+    )
+
+    response = interface_lib.robot_job_work_unit_insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+    interface_lib._connection = mock.Mock(
+        spec=interface.auth.discovery.Resource
+    )
+    interface_lib._robot_job_lib = mock.MagicMock(
+        spec=interface.robot_job.OrchestratorRobotJob
+    )
+    interface_lib._robot_job_work_unit_lib = None
+
+    response = interface_lib.robot_job_work_unit_insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
+      return_value=interface.current_robot._RESPONSE(
+          success=True, robot_id="test_robot_id"
+      ),
+  )
+  @mock.patch(
       "safari_sdk.orchestrator.client.libs.robot_job_work_unit.OrchestratorRobotJobWorkUnit.complete_work_unit",
       return_value=interface.robot_job_work_unit._RESPONSE(
           success=True,
@@ -2292,6 +2534,24 @@ class InterfaceTest(absltest.TestCase):
         outcome=interface.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
         success_score=0.5,
         success_score_definition="test_success_score_definition",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_log_type="test_session_log_type",
+        response_to_questions=[
+            interface.WORK_UNIT_QUESTION(
+                question="test_question_1",
+                whenToAsk=[
+                    interface.QUESTION_CONDITION.QUESTION_CONDITION_ALWAYS,
+                ],
+                answerFormat=interface.QUESTION_ANSWER_TYPE.ANSWER_TYPE_SINGLE_CHOICE,
+                allowedAnswers=[
+                    "test_allowed_answer_1",
+                    "test_allowed_answer_2",
+                ],
+                userAnswers=["test_user_answer_1"],
+                wasDisplayed=True,
+            ),
+        ],
         note="test_note",
     )
     self.assertTrue(response.success)
@@ -2320,6 +2580,10 @@ class InterfaceTest(absltest.TestCase):
         outcome=interface.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
         success_score=0.5,
         success_score_definition="test_success_score_definition",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_log_type="test_session_log_type",
+        response_to_questions=None,
         note="test_note",
     )
     self.assertFalse(response.success)
@@ -2339,6 +2603,10 @@ class InterfaceTest(absltest.TestCase):
         outcome=interface.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
         success_score=0.5,
         success_score_definition="test_success_score_definition",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_log_type="test_session_log_type",
+        response_to_questions=None,
         note="test_note",
     )
     self.assertFalse(response.success)
@@ -2358,6 +2626,10 @@ class InterfaceTest(absltest.TestCase):
         outcome=interface.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
         success_score=0.5,
         success_score_definition="test_success_score_definition",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_log_type="test_session_log_type",
+        response_to_questions=None,
         note="test_note",
     )
     self.assertFalse(response.success)
@@ -2560,6 +2832,96 @@ class InterfaceTest(absltest.TestCase):
     response = interface_lib.set_rui_workcell_state(
         robot_id="test_robot_id",
         workcell_state="test_workcell_state")
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.current_robot.OrchestratorCurrentRobotInfo.get_current_robot_info",
+      return_value=interface.current_robot._RESPONSE(success=True),
+  )
+  @mock.patch(
+      "safari_sdk.orchestrator.client.libs.robot_job_work_unit.OrchestratorRobotJobWorkUnit.observe_latest_work_unit",
+      return_value=interface.robot_job_work_unit._RESPONSE(
+          success=True,
+          robot_id="test_robot_id",
+          robot_job_id="test_robot_job_id",
+          work_unit_id="test_work_unit_id",
+          work_unit=interface.robot_job_work_unit.work_unit.WorkUnit(
+              robotJobId="test_robot_job_id",
+              workUnitId="test_work_unit_id",
+          ),
+      ),
+  )
+  def test_observe_latest_work_unit_good(self, *_):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+        observer_mode=True,
+    )
+
+    with mock.patch("googleapiclient.discovery.build") as mock_build:
+      mock_build.return_value = mock.Mock(
+          spec=interface.auth.discovery.Resource
+      )
+      response = interface_lib.connect()
+      self.assertTrue(response.success)
+
+    response = interface_lib.observe_latest_work_unit()
+    self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
+    self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.work_unit_id, "test_work_unit_id")
+    self.assertIsInstance(
+        response.work_unit, interface.robot_job_work_unit.work_unit.WorkUnit
+    )
+
+  def test_observe_latest_work_unit_bad_observer_mode(self):
+    FLAGS.api_key = "mock_test_key"
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+        observer_mode=False,
+    )
+    interface_lib._connection = mock.Mock(
+        spec=interface.auth.discovery.Resource
+    )
+    interface_lib._robot_job_work_unit_lib = mock.MagicMock(
+        spec=interface.robot_job_work_unit.OrchestratorRobotJobWorkUnit
+    )
+
+    response = interface_lib.observe_latest_work_unit()
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_OBSERVER_MODE_ONLY
+    )
+
+  def test_observe_latest_work_unit_bad_active_connection(self):
+    FLAGS.api_key = None
+    interface_lib = interface.OrchestratorInterface(
+        robot_id="test_robot_id",
+        job_type=interface.JOB_TYPE.ALL,
+        observer_mode=True,
+    )
+    interface_lib._connection = None
+    interface_lib._robot_job_work_unit_lib = mock.MagicMock(
+        spec=interface.robot_job_work_unit.OrchestratorRobotJobWorkUnit
+    )
+
+    response = interface_lib.observe_latest_work_unit()
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+    interface_lib._connection = mock.Mock(
+        spec=interface.auth.discovery.Resource
+    )
+    interface_lib._robot_job_work_unit_lib = None
+
+    response = interface_lib.observe_latest_work_unit()
     self.assertFalse(response.success)
     self.assertEqual(
         response.error_message, interface._ERROR_NO_ACTIVE_CONNECTION

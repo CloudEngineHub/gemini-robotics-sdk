@@ -16,6 +16,7 @@
 
 import abc
 import asyncio
+import datetime
 import inspect
 import re
 from typing import Callable, Sequence, cast
@@ -87,6 +88,8 @@ class FastApiGet:
     api_params.pop("call_id", None)  # Call ID is currently unused.
 
     # Perform the actual HTTP call.
+
+    t1 = datetime.datetime.now()
     try:
       async with httpx.AsyncClient(timeout=None) as session:
         response = await session.get(self._url, params=api_params)
@@ -98,6 +101,10 @@ class FastApiGet:
           "output": "FastAPI call execution failed",
           "error": str(e),
       }
+    t2 = datetime.datetime.now()
+    logging.info(
+        "FastApiGet %s took %.3fs", self._url, (t2 - t1).total_seconds()
+    )
     return genai_types.FunctionResponse(
         will_continue=False,
         response=response_data,

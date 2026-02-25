@@ -91,11 +91,11 @@ class GeminiClientHealth(enum.Enum):
 
   NORMAL = "NORMAL"
   # the SD tool returned 429 quota exceeded error.
-  QUOTA_EXCEEDED = "QUOTA_EXCEEDED"
+  ERROR_QUOTA_EXCEEDED = "ERROR_QUOTA_EXCEEDED"
   # the SD tool returned 503 overloaded error.
-  OVERLOADED = "OVERLOADED"
+  ERROR_OVERLOADED = "ERROR_OVERLOADED"
   # SD tool returned other error.
-  OTHER_ERROR = "OTHER_ERROR"
+  ERROR_OTHER = "ERROR_OTHER"
 
 
 class GeminiClientWrapper:
@@ -108,6 +108,7 @@ class GeminiClientWrapper:
       model_name: str,
       config: Optional[types.GenerateContentConfigOrDict],
       print_raw_response: bool = False,
+      tool_name: Optional[str] = None,
   ):
     self._bus = bus
     self._client = client
@@ -116,6 +117,7 @@ class GeminiClientWrapper:
     self._print_raw_response = print_raw_response
     self._logger = LocalFileLogger()
     self._gemini_client_health = GeminiClientHealth.NORMAL
+    self._tool_name = tool_name
     logging.info("model: %s, config: %s", self._model_name, self._config)
 
   def set_config(self, config: types.GenerateContentConfigOrDict):
@@ -133,54 +135,58 @@ class GeminiClientWrapper:
         self._gemini_client_health = GeminiClientHealth.NORMAL
         await self._bus.publish(
             event=event_bus.Event(
-                type=event_bus.EventType.GEMINI_CLIENT_HEALTH,
+                type=event_bus.EventType.TOOL_CLIENT_HEALTH,
                 source=event_bus.EventSource.AGENTIC_TOOL,
                 data={
                     "health_status": "NORMAL",
+                    "tool_name": self._tool_name,
                     "exception_message": None,
                 },
             )
         )
     elif "429" in str(e):
-      if self._gemini_client_health != GeminiClientHealth.QUOTA_EXCEEDED:
-        # If the Gemini client health is not already QUOTA_EXCEEDED, then set it
-        # to QUOTA_EXCEEDED and publish the event to the event bus.
-        self._gemini_client_health = GeminiClientHealth.QUOTA_EXCEEDED
+      if self._gemini_client_health != GeminiClientHealth.ERROR_QUOTA_EXCEEDED:
+        # If the Gemini client health is not already ERROR_QUOTA_EXCEEDED, then
+        # set it to ERROR_QUOTA_EXCEEDED and publish the event to the event bus.
+        self._gemini_client_health = GeminiClientHealth.ERROR_QUOTA_EXCEEDED
         await self._bus.publish(
             event=event_bus.Event(
-                type=event_bus.EventType.GEMINI_CLIENT_HEALTH,
+                type=event_bus.EventType.TOOL_CLIENT_HEALTH,
                 source=event_bus.EventSource.AGENTIC_TOOL,
                 data={
-                    "health_status": "QUOTA_EXCEEDED",
+                    "health_status": "ERROR_QUOTA_EXCEEDED",
+                    "tool_name": self._tool_name,
                     "exception_message": str(e),
                 },
             )
         )
     elif "503" in str(e):
-      if self._gemini_client_health != GeminiClientHealth.OVERLOADED:
-        # If the Gemini client health is not already OVERLOADED, then set it to
-        # OVERLOADED and publish the event to the event bus.
-        self._gemini_client_health = GeminiClientHealth.OVERLOADED
+      if self._gemini_client_health != GeminiClientHealth.ERROR_OVERLOADED:
+        # If the Gemini client health is not already ERROR_OVERLOADED, then set
+        # it toERROR_OVERLOADED and publish the event to the event bus.
+        self._gemini_client_health = GeminiClientHealth.ERROR_OVERLOADED
         await self._bus.publish(
             event=event_bus.Event(
-                type=event_bus.EventType.GEMINI_CLIENT_HEALTH,
+                type=event_bus.EventType.TOOL_CLIENT_HEALTH,
                 source=event_bus.EventSource.AGENTIC_TOOL,
                 data={
-                    "health_status": "OVERLOADED",
+                    "health_status": "ERROR_OVERLOADED",
+                    "tool_name": self._tool_name,
                     "exception_message": str(e),
                 },
             )
         )
-    elif self._gemini_client_health != GeminiClientHealth.OTHER_ERROR:
-      # If the Gemini client health is not already OTHER_ERROR, then set it to
-      # OTHER_ERROR and publish the event to the event bus.
-      self._gemini_client_health = GeminiClientHealth.OTHER_ERROR
+    elif self._gemini_client_health != GeminiClientHealth.ERROR_OTHER:
+      # If the Gemini client health is not already ERROR_OTHER, then set it to
+      # ERROR_OTHER and publish the event to the event bus.
+      self._gemini_client_health = GeminiClientHealth.ERROR_OTHER
       await self._bus.publish(
           event=event_bus.Event(
-              type=event_bus.EventType.GEMINI_CLIENT_HEALTH,
+              type=event_bus.EventType.TOOL_CLIENT_HEALTH,
               source=event_bus.EventSource.AGENTIC_TOOL,
               data={
-                  "health_status": "OTHER_ERROR",
+                  "health_status": "ERROR_OTHER",
+                  "tool_name": self._tool_name,
                   "exception_message": str(e),
               },
           )

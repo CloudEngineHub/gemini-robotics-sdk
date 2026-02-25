@@ -14,9 +14,10 @@
 
 """Logger for Episodic data."""
 
-from collections.abc import Callable, Mapping
+import collections
+from collections.abc import Callable, Mapping, Sequence
 import copy
-import io
+import dataclasses
 import time
 from typing import Any
 import uuid
@@ -27,18 +28,104 @@ from dm_env import specs
 from gdm_robotics.interfaces import episodic_logger
 from gdm_robotics.interfaces import types as gdmr_types
 import numpy as np
-from PIL import Image
 import tree
 
 from google.protobuf import struct_pb2
+from safari_sdk.logging.cc.python import log_writer
 from safari_sdk.logging.python import constants
-from safari_sdk.logging.python import file_handler as file_handler_lib
-from safari_sdk.logging.python import mcap_message_writer as mcap_message_writer_lib
 from safari_sdk.logging.python import metadata_utils
 from safari_sdk.logging.python import session_manager as session_manager_lib
 from safari_sdk.protos import label_pb2
-from tensorflow.core.example import example_pb2
-from tensorflow.core.example import feature_pb2
+from safari_sdk.protos.logging import orchestrator_info_pb2
+from safari_sdk.protos.logging import policy_type_pb2
+
+
+@dataclasses.dataclass(frozen=True)
+class EpisodeMetadataConfig:
+  """Configuration for episode metadata.
+
+  The episode metadata will be written to the Session proto by the
+  SessionManager.
+
+  Attributes:
+    policy_type: The type of the policy used to generate the data. This can be a
+      PolicyType or a Callable that returns a PolicyType. Using a callable can
+      be useful if the policy type changes between episodes. If provided, it is
+      called when `write` is called and the result is set in the session.
+    embodiment_version: A string that represents the version of the embodiment.
+    control_timestep_seconds: The control timestep in seconds.
+    fixed_tags: Fixed tags to be added to all episodes.
+    dynamic_episode_taggers: A Sequence of Callables each returning a Sequence
+      of strings. These are called when `write` is called and the tags are added
+      to the session manager.
+    dynamic_metadata_provider: A function that provides dynamic metadata to be
+      logged as session labels. The function is called when `write` is called.
+    orchestrator_info_provider: An optional callable that returns the current
+      OrchestratorInfo proto. If provided, it is called when the session is
+      stopped and the result is written to the Session proto.
+  """
+
+  policy_type: metadata_utils.PolicyConfigType = (
+      policy_type_pb2.PolicyType.POLICY_TYPE_UNSPECIFIED
+  )
+  embodiment_version: str = ""
+  control_timestep_seconds: float = 0.0
+  fixed_tags: Sequence[str] = ()
+  dynamic_episode_taggers: Sequence[Callable[[], Sequence[str]]] = ()
+  dynamic_metadata_provider: Callable[[], Mapping[str, str]] | None = None
+  orchestrator_info_provider: (
+      Callable[[], orchestrator_info_pb2.OrchestratorInfo] | None
+  ) = None
+
+
+@dataclasses.dataclass(frozen=True)
+class EpisodicLoggerConfig:
+  """Configuration for EpisodicLogger.
+
+  Attributes:
+    agent_id: The ID of the agent.
+    task_id: The ID of the task.
+    output_directory: The output directory. Note that episodes will be written
+      to a subdirectory of this directory. The directory structure will be
+      YYYY/MM/DD.
+    image_observation_keys: A container of camera names in observation, used to
+      encode images as jpeg (without th the /observation prefix).
+    proprioceptive_observation_keys: A container of keys for the proprioceptive
+      data in the observations.
+    timestep_spec: The timestep spec.
+    action_spec: The action spec.
+    policy_extra_spec: The policy extra spec.
+    metadata_config: The configuration for the episode metadata.
+    validate_data_with_spec: Whether to validate the data with the spec.
+    timestamp_key: The observation key that maps to the timestamps of each step
+      in an episode. This is used to set the publish time of each MCAP message.
+      This is optional, if not provided, the logger will generate timestamps
+      using time.time_ns().
+    batch_size: The number of steps to batch before writing to disk. If None, no
+      batching will be done and the entire episode will stored in memory and
+      written to disk in a single batch.
+    num_workers: The number of workers to use for writing to disk. If None, the
+      default number of workers will be used.
+    file_shard_size_limit_bytes: The file shard size limits in bytes. Default is
+      2GB.
+  """
+
+  agent_id: str
+  task_id: str
+  output_directory: str
+  image_observation_keys: Sequence[str]
+  proprioceptive_observation_keys: Sequence[str]
+  timestep_spec: gdmr_types.TimeStepSpec
+  action_spec: gdmr_types.ActionSpec  # pytype: disable=invalid-annotation
+  policy_extra_spec: gdmr_types.ExtraOutputSpec
+  metadata_config: EpisodeMetadataConfig = dataclasses.field(
+      default_factory=EpisodeMetadataConfig
+  )
+  validate_data_with_spec: bool = True
+  timestamp_key: str | None = None
+  batch_size: int | None = None
+  num_workers: int | None = None
+  file_shard_size_limit_bytes: int = 2 * 1024 * 1024 * 1024
 
 
 class EpisodicLogger(episodic_logger.EpisodicLogger):
@@ -47,172 +134,203 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
   @classmethod
   def create(
       cls,
-      agent_id: str,
-      task_id: str,
-      output_directory: str,
-      image_observation_keys: list[str],
-      proprioceptive_observation_keys: list[str],
-      timestep_spec: gdmr_types.TimeStepSpec,
-      action_spec: gdmr_types.ActionSpec,
-      policy_extra_spec: gdmr_types.ExtraOutputSpec,
-      file_shard_size_limit_bytes: int = 2 * 1024 * 1024 * 1024,
-      validate_data_with_spec: bool = True,
-      timestamp_key: str | None = None,
-      dynamic_metadata_provider: Callable[[], Mapping[str, str]] | None = None,
+      config: EpisodicLoggerConfig,
   ) -> "EpisodicLogger":
     """Creates a EpisodicLogger with its dependencies.
 
     Args:
-      agent_id: The ID of the agent.
-      task_id: The ID of the task.
-      output_directory: The output directory. Note that episodes will be written
-        to a subdirectory of this directory. The directory structure will be
-        YYYY/MM/DD.
-      image_observation_keys: A container of camera names in observation, used
-        to encode images as jpeg (without th the /observation prefix).
-      proprioceptive_observation_keys: A container of keys for the
-        proprioceptive data in the observations.
-      timestep_spec: The timestep spec.
-      action_spec: The action spec.
-      policy_extra_spec: The policy extra spec.
-      file_shard_size_limit_bytes: The file shard size limits in bytes. Default
-        is 2GB.
-      validate_data_with_spec: Whether to validate the data with the spec.
-      timestamp_key: The observation key that maps to the the timestamps of each
-        step in an episode. This is used to set the publish time of each MCAP
-        message. This is optional, if not provided, the logger will generate
-        timestamps using time.time_ns().
-      dynamic_metadata_provider: A function that provides dynamic metadata to be
-        logged as session labels. The function is called when `write` is called.
+      config: The configuration for the episodic logger.
 
     Returns:
         A EpisodicLogger instance.
     """
-    if not agent_id:
+    if not config.task_id:
+      raise ValueError("task_id must be provided as a non-empty string.")
+
+    if not config.agent_id:
       raise ValueError("agent_id must be provided as a non-empty string.")
 
+    if (
+        config.batch_size is not None
+        and config.batch_size < constants.MIN_BATCH_SIZE
+    ):
+      raise ValueError(
+          f"Batch size must be at least {constants.MIN_BATCH_SIZE}. If you want"
+          " to disable batching, please set batch_size to None."
+      )
     topics = {
         constants.ACTION_TOPIC_NAME,
         constants.TIMESTEP_TOPIC_NAME,
         constants.POLICY_EXTRA_TOPIC_NAME,
     }
-    required_topics = set()
+    # Timestep and action are required to pass the SSOT consistency check.
+    required_topics = {
+        constants.ACTION_TOPIC_NAME,
+        constants.TIMESTEP_TOPIC_NAME,
+    }
 
-    file_handler = file_handler_lib.FileHandler(
-        agent_id=agent_id,
-        topics=topics,
-        output_directory=output_directory,
-        file_shard_size_limit_bytes=file_shard_size_limit_bytes,
-    )
-    mcap_message_writer = mcap_message_writer_lib.McapMessageWriter(
-        file_handler=file_handler,
-    )
-
-    # Validate the specs are of the correct type before we pass to the session
-    # manager and the logger.
-    _validate_metadata(
-        image_observation_keys,
-        proprioceptive_observation_keys,
-        timestep_spec,
-        action_spec,
-    )
+    if config.validate_data_with_spec:
+      # Validate the specs are of the correct type before we pass to the session
+      # manager and the logger.
+      _validate_metadata(
+          config.image_observation_keys,
+          config.proprioceptive_observation_keys,
+          config.timestep_spec,
+          config.action_spec,
+      )
 
     session_manager = session_manager_lib.SessionManager(
         topics=topics,
         required_topics=required_topics,
         policy_environment_metadata_params=metadata_utils.PolicyEnvironmentMetadataParams(
-            jpeg_compression_keys=image_observation_keys,
-            observation_spec=timestep_spec.observation,
-            reward_spec=timestep_spec.reward,
-            discount_spec=timestep_spec.discount,
-            action_spec=action_spec,
-            policy_extra_spec=policy_extra_spec,
+            jpeg_compression_keys=config.image_observation_keys,
+            observation_spec=config.timestep_spec.observation,
+            reward_spec=config.timestep_spec.reward,
+            discount_spec=config.timestep_spec.discount,
+            action_spec=config.action_spec,
+            policy_extra_spec=config.policy_extra_spec,
+            policy_type=config.metadata_config.policy_type,
+            control_timestep=config.metadata_config.control_timestep_seconds,
+            embodiment_version=config.metadata_config.embodiment_version,
+        ),
+        fixed_tags=config.metadata_config.fixed_tags,
+        dynamic_episode_taggers=config.metadata_config.dynamic_episode_taggers,
+        orchestrator_info_provider=config.metadata_config.orchestrator_info_provider,
+    )
+
+    max_num_workers = (
+        config.num_workers
+        if config.num_workers
+        else constants.DEFAULT_NUM_WORKERS
+    )
+    thread_pool_log_writer_config = log_writer.ThreadPoolLogWriterConfig(
+        max_num_workers=max_num_workers,
+        image_observation_keys=[
+            constants.OBSERVATION_KEY_TEMPLATE.format(key)
+            for key in config.image_observation_keys
+        ],
+        mcap_file_config=log_writer.McapFileConfig(
+            output_dir=config.output_directory,
+            filename_prefix=constants.MCAP_FILE_NAME_PREFIX,
+            file_metadata_topic=constants.FILE_METADATA_TOPIC_NAME,
+            agent_id=config.agent_id,
+            file_shard_size_limit_bytes=config.file_shard_size_limit_bytes,
         ),
     )
+
+    writer = log_writer.create_log_writer(config=thread_pool_log_writer_config)
+    if writer is None:
+      raise ValueError("Failed to create log writer.")
+
     return cls(
-        task_id=task_id,
-        image_observation_keys=image_observation_keys,
-        proprioceptive_observation_keys=proprioceptive_observation_keys,
-        timestep_spec=timestep_spec,
-        action_spec=action_spec,
-        policy_extra_spec=policy_extra_spec,
-        mcap_message_writer=mcap_message_writer,
+        config=config,
         session_manager=session_manager,
-        validate_data_with_spec=validate_data_with_spec,
-        timestamp_key=timestamp_key,
-        dynamic_metadata_provider=dynamic_metadata_provider,
+        writer=writer,
     )
 
   def __init__(
       self,
-      task_id: str,
-      image_observation_keys: list[str],
-      proprioceptive_observation_keys: list[str],
-      timestep_spec: gdmr_types.TimeStepSpec,
-      action_spec: gdmr_types.ActionSpec,
-      policy_extra_spec: gdmr_types.ExtraOutputSpec,
-      mcap_message_writer: mcap_message_writer_lib.McapMessageWriter,
+      config: EpisodicLoggerConfig,
       session_manager: session_manager_lib.SessionManager,
-      validate_data_with_spec: bool = True,
-      timestamp_key: str | None = None,
-      dynamic_metadata_provider: Callable[[], Mapping[str, str]] | None = None,
+      writer: log_writer.LogWriter,
   ):
     """Initializes the episodic logger.
 
     Args:
-      task_id: The task ID.
-      image_observation_keys: A container of camera names in observation, used
-        to encode images as jpeg.
-      proprioceptive_observation_keys: A container of keys of the proprio data
-        in the observations.
-      timestep_spec: TimeStep spec, used for validation and metadata logging.
-      action_spec: Action spec, used for validation and metadata logging.
-      policy_extra_spec: Policy extra spec, used for validation and metadata
-        logging.
-      mcap_message_writer: The message writer for writing logs to mcap files.
+      config: The configuration for the episodic logger.
       session_manager: The session manager for managing session metadata.
-      validate_data_with_spec: Whether to validate all the logged data with the
-        provided spec.
-      timestamp_key: The observation key that maps to the the timestamps of each
-        step in an episode. This is used to set the publish time of each MCAP
-        message. This is optional, if not provided, the logger will generate
-        timestamps using time.time_ns().
-      dynamic_metadata_provider: A function that provides dynamic metadata to be
-        logged as session labels. The function is called when `write` is called.
+      writer: The log writer.
     """
-    if not task_id:
-      raise ValueError("task_id must be provided as a non-empty string.")
+    self._config = config
+    self._writer = writer
+    self._batch_size = config.batch_size
 
-    self._mcap_message_writer = mcap_message_writer
+    if self._batch_size is not None:
+      logging.info(
+          "Batching logging is enabled with batch size: %s steps.",
+          self._batch_size,
+      )
+    else:
+      logging.info("Batching logging is disabled.")
+
+    self._current_batch_size = 0
+    self._batch_number = 0
+
+    self._timestep_batch = collections.defaultdict(list)
+    self._action_batch = collections.defaultdict(list)
+    self._policy_extra_batch = collections.defaultdict(list)
+
     self._session_manager = session_manager
 
-    self._episode_raw_timesteps: list[dm_env.TimeStep] = []
-    self._episode_raw_actions: list[tree.Structure[np.ndarray]] = []
-    self._episode_raw_policy_extra: list[Mapping[str, Any]] = []
+    self._output_directory = config.output_directory
 
     self._timestep_publish_time_ns: list[int] = []
+    self._action_publish_time_ns: list[int] = []
+    self._last_timestep_publish_time_ns = 0
 
     self._episode_start_time_ns = 0
     self._current_episode_step = 0
-    self._task_id = task_id
-    self._image_observation_keys = image_observation_keys
-    self._proprioceptive_observation_keys = proprioceptive_observation_keys
+    self._task_id = config.task_id
+    self._image_observation_keys = config.image_observation_keys
+    self._proprioceptive_observation_keys = (
+        config.proprioceptive_observation_keys
+    )
 
-    self._timestep_spec = timestep_spec
-    self._action_spec = action_spec
-    self._policy_extra_spec = policy_extra_spec
-    self._validate_data_with_spec = validate_data_with_spec
-    self._timestamp_key = timestamp_key
-    self._dynamic_metadata_provider = dynamic_metadata_provider
+    self._timestep_spec = config.timestep_spec
+    self._action_spec = config.action_spec
+    self._policy_extra_spec = config.policy_extra_spec
+    self._validate_data_with_spec = config.validate_data_with_spec
+    self._timestamp_key = config.timestamp_key
+    self._dynamic_metadata_provider = (
+        config.metadata_config.dynamic_metadata_provider
+    )
+
+    self._episode_uuid: str = ""
 
     # Whether the logger is currently recording data.
     # We mark as True when reset is called and False after writing an episode
     # has been completed.
     self._is_recording = False
+    # Whether the logger has been stopped. This is set to True when stop is
+    # called.
+    self._stopped = False
 
-  def reset(
-      self, timestep: dm_env.TimeStep, episode_uuid: str | None = None
-  ) -> None:
+  def __del__(self):
+    """Stops the logger and writes any remaining data."""
+    self.stop()
+
+  def stop(self) -> None:
+    """Stops the logger and writes any remaining data."""
+    self._writer.stop()
+    self._is_recording = False
+    self._stopped = True
+
+  def flush(self) -> None:
+    """Flushes the logger and writes any remaining data."""
+    self._writer.stop()
+    self._writer.start()
+
+  def _get_timestamp_ns_from_timestep(self, timestep: dm_env.TimeStep) -> int:
+    """Returns the timestamp from the TimeStep in nanoseconds."""
+    timestamp = timestep.observation[self._timestamp_key]
+    if isinstance(timestamp, int):
+      return timestamp
+    elif isinstance(timestamp, np.ndarray):
+      if not np.issubdtype(timestamp.dtype, np.integer):
+        msg = (
+            "Timestamp array must be an integer type, but got "
+            f"{timestamp.dtype}."
+        )
+      elif timestamp.size != 1:
+        msg = f"Timestamp array must have size 1, but got {timestamp.size}."
+      else:
+        return int(timestamp.item())
+    else:
+      msg = f"Unsupported timestamp type: {type(timestamp)}."
+
+    raise ValueError(f"Fetching timestamp from Timestep failed: {msg}")
+
+  def reset(self, timestep: dm_env.TimeStep) -> None:
     """Resets the logger with a starting TimeStep.
 
     All existing data will be flushed to the current episode.
@@ -222,28 +340,18 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
 
     Args:
       timestep: The starting timestep of the episode.
-      episode_uuid: The uuid of the episode. If None, a new uuid will be
-        generated.
     """
 
     # Call write to flush previous episode.
     if self._current_episode_step > 0:
       self.write()
 
-    self._clear_saved_data()
+    self._reset_saved_data()
 
     if self._timestamp_key:
-      timestamp_ns = timestep.observation[self._timestamp_key]
+      timestamp_ns = self._get_timestamp_ns_from_timestep(timestep)
     else:
       timestamp_ns = time.time_ns()
-
-    self._episode_raw_timesteps.append(timestep)
-    self._timestep_publish_time_ns.append(timestamp_ns)
-    self._current_episode_step += 1
-
-    episode_uuid = uuid.uuid4() if episode_uuid is None else episode_uuid
-
-    output_file_prefix = f"episode_log_{episode_uuid}"
 
     # Try to start a new session.
     try:
@@ -254,12 +362,15 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
       logging.exception("Failed to start session for logging episode.")
       raise
 
-    # Reset the file handler and start the worker thread for writing logs.
-    self._mcap_message_writer.reset_file_handler(
-        output_file_prefix=output_file_prefix,
-        start_timestamp_nsec=timestamp_ns,
-    )
-    self._mcap_message_writer.start()
+    self._add_timestep_to_batch(timestep)
+    self._timestep_publish_time_ns.append(timestamp_ns)
+
+    self._current_episode_step += 1
+    self._current_batch_size += 1
+
+    self._episode_uuid = str(uuid.uuid4())
+
+    logging.info("Resetting logger for Episode uuid: %s", self._episode_uuid)
 
     # Mark the logger as recording.
     self._is_recording = True
@@ -280,21 +391,188 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
       next_timestep: The resulting timestep of the action.
       policy_extra: The extra output from the policy.
     """
+    if self._stopped:
+      logging.warning("Logger is stopped. Ignoring the current step.")
+      return
+
     if self._timestamp_key:
-      timestamp_ns = next_timestep.observation[self._timestamp_key]
+      timestamp_ns = self._get_timestamp_ns_from_timestep(next_timestep)
     else:
       timestamp_ns = time.time_ns()
 
-    self._episode_raw_actions.append(action)
-    self._episode_raw_timesteps.append(next_timestep)
-    self._episode_raw_policy_extra.append(policy_extra)
-    self._current_episode_step += 1
+    # The next action push time should be equal to the previous timestep
+    # publish time.
+    if self._timestep_publish_time_ns:
+      self._action_publish_time_ns.append(self._timestep_publish_time_ns[-1])
+
     self._timestep_publish_time_ns.append(timestamp_ns)
+
+    # Validate the data before adding it to the batch.
+    if self._validate_data_with_spec:
+      self._validate_timestep(next_timestep)
+      self._validate_action(action)
+      self._validate_policy_extra(policy_extra)
+
+    self._add_timestep_to_batch(next_timestep)
+    self._add_action_to_batch(action)
+    self._add_policy_extra_to_batch(policy_extra)
+
+    self._current_batch_size += 1
+    self._current_episode_step += 1
+
+    last_batch = next_timestep.step_type == dm_env.StepType.LAST
+    # Write the batch if the batch size is reached.
+    # Or if the next timestep is the last timestep of the episode.
+    if self._batch_size and (
+        self._current_batch_size == self._batch_size or last_batch
+    ):
+      self._write_batch(last_batch)
+
+  def _add_timestep_to_batch(self, timestep: dm_env.TimeStep) -> None:
+    # Adds the timestep to the current batch.
+
+    if not isinstance(timestep.observation, Mapping):
+      raise TypeError(
+          f"Unsupported observation type: {type(timestep.observation)}"
+      )
+    # Append the step type to the batch.
+    self._timestep_batch[constants.STEP_TYPE_KEY].append(
+        np.asarray(timestep.step_type, dtype=np.int32)
+    )
+
+    # Append the observations to the batch.
+    for key, value in timestep.observation.items():
+      self._timestep_batch[
+          constants.OBSERVATION_KEY_TEMPLATE.format(key)
+      ].append(value)
+
+    # Append the rewards to the batch.
+    if isinstance(timestep.reward, Mapping):
+      for key, value in timestep.reward.items():
+        self._timestep_batch[constants.REWARD_KEY_TEMPLATE.format(key)].append(
+            value
+        )
+    else:
+      reward = np.asarray(timestep.reward)
+      # Reward is a float. If the `asarray` converted it to something different,
+      # cast it back to a float.
+      if reward.dtype != np.float64 or reward.dtype != np.float32:
+        reward = reward.astype(np.float32, copy=False)
+      self._timestep_batch[constants.REWARD_KEY].append(reward)
+
+    # Append the discounts to the batch.
+    if isinstance(timestep.discount, Mapping):
+      for key, value in timestep.discount.items():
+        self._timestep_batch[
+            constants.DISCOUNT_KEY_TEMPLATE.format(key)
+        ].append(value)
+    else:
+      discount = np.asarray(timestep.discount)
+      # Discount is a float. If the `asarray` converted it to something
+      # different, cast it back to a float. Casting should be always safe.
+      if discount.dtype != np.float64 or discount.dtype != np.float32:
+        discount = discount.astype(np.float32, copy=False)
+      self._timestep_batch[constants.DISCOUNT_KEY].append(discount)
+
+  def _add_action_to_batch(self, action: gdmr_types.ActionType) -> None:
+    # Adds the action to the current batch.
+    if isinstance(action, Mapping):
+      for key, value in action.items():
+        self._action_batch[constants.ACTION_KEY_TEMPLATE.format(key)].append(
+            value
+        )
+    elif isinstance(action, np.ndarray):
+      self._action_batch[constants.ACTION_KEY_PREFIX].append(action)
+    else:
+      raise TypeError(f"Unsupported action type: {type(action)}")
+
+  def _add_policy_extra_to_batch(self, policy_extra: Mapping[str, Any]) -> None:
+    # Adds the policy extra to the current batch.
+    for key, value in policy_extra.items():
+      self._policy_extra_batch[
+          constants.POLICY_EXTRA_KEY_TEMPLATE.format(key)
+      ].append(value)
+
+  def _pad_action_and_policy_extra_batch(self) -> None:
+    # Pad the last action and policy extra with the last corresponding values so
+    # as to have the same length for all repeated fields. This is because the
+    # last environment transition does not have an associated action and policy
+    # extra.
+    for key in self._action_batch.keys():
+      padded_action = copy.deepcopy(self._action_batch[key][-1])
+      self._action_batch[key].append(padded_action)
+
+    for key in self._policy_extra_batch.keys():
+      padded_policy_extra = copy.deepcopy(self._policy_extra_batch[key][-1])
+      self._policy_extra_batch[key].append(padded_policy_extra)
+
+    self._action_publish_time_ns.append(self._timestep_publish_time_ns[-1])
+
+  def _write_batch(self, last_batch: bool = False) -> None:
+    # Writes the current batch of data to disk.
+    # If the last batch is true, we will pad the action and policy extra batch.
+    if self._current_batch_size == 0:
+      logging.info("No data to write. Batch size is 0.")
+      return
+
+    timestep_options = log_writer.EnqueueMcapFileOptions(
+        episode_uuid=self._episode_uuid,
+        topic=constants.TIMESTEP_TOPIC_NAME,
+        timestamp_ns=self._timestep_publish_time_ns[-1],
+    )
+
+    for key, value in self._timestep_batch.items():
+      self._timestep_batch[key] = np.asarray(value)
+
+    self._writer.enqueue_episode_data(
+        self._timestep_batch, self._timestep_publish_time_ns, timestep_options
+    )
+
+    # Pad the last action and policy extra with the last corresponding values
+    # so as to have the same length for all repeated fields. This is because the
+    # last environment transition does not have an associated action and policy
+    # extra.
+    if last_batch:
+      self._pad_action_and_policy_extra_batch()
+      self._last_timestep_publish_time_ns = self._timestep_publish_time_ns[-1]
+
+    action_options = log_writer.EnqueueMcapFileOptions(
+        episode_uuid=self._episode_uuid,
+        topic=constants.ACTION_TOPIC_NAME,
+        timestamp_ns=self._action_publish_time_ns[-1],
+    )
+
+    for key, value in self._action_batch.items():
+      self._action_batch[key] = np.asarray(value)
+
+    self._writer.enqueue_episode_data(
+        self._action_batch, self._action_publish_time_ns, action_options
+    )
+
+    policy_extra_options = log_writer.EnqueueMcapFileOptions(
+        episode_uuid=self._episode_uuid,
+        topic=constants.POLICY_EXTRA_TOPIC_NAME,
+        timestamp_ns=self._action_publish_time_ns[-1],
+    )
+    for key, value in self._policy_extra_batch.items():
+      self._policy_extra_batch[key] = np.asarray(value)
+
+    self._writer.enqueue_episode_data(
+        self._policy_extra_batch,
+        self._action_publish_time_ns,
+        policy_extra_options,
+    )
+
+    # Reset the batch variables. Increase the batch number for the same episode.
+    self._current_batch_size = 0
+    self._batch_number += 1
+
+    self._reset_batch_data()
 
   def write(self) -> None:
     """Writes the current episode logged data by converting accumulated data to protos."""
     # If the logger is not recording data, we should not write.
-    # This protects against cases whwere we try to call write() without calling
+    # This protects against cases where we try to call write() without calling
     # reset() first.
     if not self._is_recording:
       logging.info("Logger is not recording data. Skipping write.")
@@ -306,63 +584,9 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
 
     logging.info("Writing episode with %d steps.", self._current_episode_step)
 
-    # Pad the last action and policy extra with the last corresponding values so
-    # as to have the same length for all repeated fields. This is because the
-    # last environment transition does not have an associated action and policy
-    # extra.
-    padded_action = copy.deepcopy(self._episode_raw_actions[-1])
-    padded_policy_extra = copy.deepcopy(self._episode_raw_policy_extra[-1])
-
-    self._episode_raw_actions.append(padded_action)
-    self._episode_raw_policy_extra.append(padded_policy_extra)
-
-    if self._validate_data_with_spec:
-      for raw_action, raw_policy_extra, raw_timestep in zip(
-          self._episode_raw_actions,
-          self._episode_raw_policy_extra,
-          self._episode_raw_timesteps,
-      ):
-        self._validate_timestep(raw_timestep)
-        self._validate_action(raw_action)
-        self._validate_policy_extra(raw_policy_extra)
-
-    for raw_action, policy_extra, raw_timestep, publish_time_ns in zip(
-        self._episode_raw_actions,
-        self._episode_raw_policy_extra,
-        self._episode_raw_timesteps,
-        self._timestep_publish_time_ns,
-    ):
-      action_example = _dict_to_example(
-          self._action_to_dict(raw_action)
-      )  # Convert action to proto
-      timestep_example = _dict_to_example(
-          self._timestep_to_dict(raw_timestep),
-          image_observation_keys=self._image_observation_keys,
-      )  # Convert timestep to proto
-      policy_extra_example = _dict_to_example(
-          self._policy_extra_to_dict(policy_extra)
-      )  # Convert policy extra to proto
-
-      self._mcap_message_writer.write_proto_message(
-          topic=constants.ACTION_TOPIC_NAME,
-          message=action_example,
-          publish_time_nsec=publish_time_ns,
-          log_time_nsec=publish_time_ns,
-      )
-      self._mcap_message_writer.write_proto_message(
-          topic=constants.TIMESTEP_TOPIC_NAME,
-          message=timestep_example,
-          publish_time_nsec=publish_time_ns,
-          log_time_nsec=publish_time_ns,
-      )
-      self._mcap_message_writer.write_proto_message(
-          topic=constants.POLICY_EXTRA_TOPIC_NAME,
-          message=policy_extra_example,
-          publish_time_nsec=publish_time_ns,
-          log_time_nsec=publish_time_ns,
-      )
-
+    self._write_batch(last_batch=True)
     self._write_session()
+    self._writer.finalize_episode(self._episode_uuid)
 
     # Mark the logger as not recording once the episode has been written.
     self._is_recording = False
@@ -370,7 +594,21 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
     logging.info(
         "Episode written to mcap. Episode steps: %d", self._current_episode_step
     )
-    self._clear_saved_data()
+    self._reset_saved_data()
+
+  def set_task_id(self, task_id: str) -> None:
+    """Sets the task ID of the logger.
+
+    This should be called before reset() to change the task_id for a new
+    episode.
+
+    Args:
+      task_id: The task ID of the logger.
+    """
+    if self._is_recording:
+      raise ValueError("Logger is recording data. Cannot set task ID.")
+
+    self._task_id = task_id
 
   def _write_session(self) -> None:
     """Writes the Session message to an mcap file.
@@ -404,6 +642,15 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         )
     )
 
+    self._session_manager.add_session_label(
+        label_pb2.LabelMessage(
+            key="number_of_timesteps",
+            label_value=struct_pb2.Value(
+                number_value=self._current_episode_step
+            ),
+        )
+    )
+
     # TODO: Use standard metadata logging method.
     if self._dynamic_metadata_provider is not None:
       additional_metadata = self._dynamic_metadata_provider()
@@ -415,26 +662,38 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
             )
         )
 
-    episode_end_time_ns = self._timestep_publish_time_ns[-1]
+    episode_end_time_ns = self._last_timestep_publish_time_ns
+    logging.info("Episode end time ns: %d", episode_end_time_ns)
     session = self._session_manager.stop_session(
         stop_timestamp_nsec=episode_end_time_ns
     )
-    # Write the Session proto to the log file.
-    self._mcap_message_writer.write_proto_message(
-        topic=constants.SESSION_TOPIC_NAME,
-        message=session,
-        publish_time_nsec=episode_end_time_ns,
-        log_time_nsec=episode_end_time_ns,
-    )
-    # Flush the queue and stop the worker thread.
-    self._mcap_message_writer.stop(stop_timestamp_nsec=episode_end_time_ns)
 
-  def _clear_saved_data(self) -> None:
-    self._episode_raw_timesteps.clear()
-    self._episode_raw_actions.clear()
-    self._episode_raw_policy_extra.clear()
-    self._timestep_publish_time_ns.clear()
+    self._writer.enqueue_session_data(
+        session,
+        log_writer.EnqueueMcapFileOptions(
+            episode_uuid=self._episode_uuid,
+            topic=constants.SESSION_TOPIC_NAME,
+            timestamp_ns=episode_end_time_ns,
+        ),
+    )
+
+  def _reset_batch_data(self, reset_episode: bool = False) -> None:
+    # If the episode is not being reset, we can reuse the previous timestep
+    # publish time as the action publish time for the current step.
+    if not reset_episode and self._timestep_publish_time_ns:
+      self._action_publish_time_ns = [self._timestep_publish_time_ns[-1]]
+    else:
+      self._action_publish_time_ns = []
+    self._timestep_publish_time_ns = []
+    self._timestep_batch = collections.defaultdict(list)
+    self._action_batch = collections.defaultdict(list)
+    self._policy_extra_batch = collections.defaultdict(list)
+
+  def _reset_saved_data(self) -> None:
+    self._reset_batch_data(reset_episode=True)
     self._current_episode_step = 0
+    self._current_batch_size = 0
+    self._batch_number = 0
 
   def _validate_timestep(self, timestep: dm_env.TimeStep) -> None:
     """Validates a timestep."""
@@ -493,138 +752,10 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
       logging.exception("Policy extra validation failed for policy extra.")
       raise
 
-  def _timestep_to_dict(
-      self, timestep: dm_env.TimeStep
-  ) -> Mapping[str, np.ndarray]:
-    """Converts a dm_env.TimeStep to a dictionary of numpy arrays."""
-    obs_dict = {}
-    # Prefix the observation keys with a common prefix.
-    if isinstance(timestep.observation, Mapping):
-      for key, value in timestep.observation.items():
-        obs_dict[constants.OBSERVATION_KEY_TEMPLATE.format(key)] = value
-    else:
-      raise TypeError(
-          f"Unsupported observation type: {type(timestep.observation)}"
-      )
-
-    timestep_dict = {
-        constants.STEP_TYPE_KEY: np.asarray(
-            # Step_type is a uint8 but we upscale to avoid being treated as
-            # bytes later when converting to tf.Example.
-            timestep.step_type,
-            dtype=np.int32,
-        ),  # Ensure scalar is an array
-        **obs_dict,  # Add observations
-    }
-
-    if isinstance(timestep.reward, Mapping):
-      for key, value in timestep.reward.items():
-        timestep_dict[constants.REWARD_KEY_TEMPLATE.format(key)] = value
-    else:
-      reward = np.asarray(timestep.reward)
-      # Reward is a float. If the `asarray` converted it to something different,
-      # cast it back to a float.
-      if reward.dtype != np.float64 or reward.dtype != np.float32:
-        reward = reward.astype(np.float32, copy=False)
-      timestep_dict[constants.REWARD_KEY] = reward
-
-    if isinstance(timestep.discount, Mapping):
-      for key, value in timestep.discount.items():
-        timestep_dict[constants.DISCOUNT_KEY_TEMPLATE.format(key)] = value
-    else:
-      discount = np.asarray(timestep.discount)
-      # Discount is a float. If the `asarray` converted it to something
-      # different, cast it back to a float. Casting should be always safe.
-      if discount.dtype != np.float64 or discount.dtype != np.float32:
-        discount = discount.astype(np.float32, copy=False)
-      timestep_dict[constants.DISCOUNT_KEY] = discount
-
-    return timestep_dict
-
-  def _action_to_dict(
-      self, action: Mapping[str, np.ndarray] | np.ndarray
-  ) -> Mapping[str, np.ndarray]:
-    """Converts an ActionType to a dictionary of numpy arrays."""
-
-    if not isinstance(action, np.ndarray):
-      raise TypeError(
-          f"Unsupported action type: {type(action)}. Only np.ndarray is"
-          " supported."
-      )
-
-    return {constants.ACTION_KEY_PREFIX: action}
-
-  def _policy_extra_to_dict(
-      self, policy_extra: Mapping[str, Any]
-  ) -> Mapping[str, np.ndarray]:
-    """Prefix the keys of the policy extra with a common prefix."""
-    policy_extra_dict = {}
-    for key, value in policy_extra.items():
-      policy_extra_dict[constants.POLICY_EXTRA_KEY_TEMPLATE.format(key)] = value
-    return policy_extra_dict
-
-
-def _np_array_to_feature(array: np.ndarray) -> feature_pb2.Feature:
-  """Converts a numpy array to a TensorFlow Feature."""
-  if array.dtype == np.float32 or array.dtype == np.float64:
-    return feature_pb2.Feature(
-        float_list=feature_pb2.FloatList(value=array.flatten())
-    )
-  elif array.dtype == np.int32 or array.dtype == np.int64:
-    return feature_pb2.Feature(
-        int64_list=feature_pb2.Int64List(value=array.flatten())
-    )
-  elif array.dtype == np.uint8 or array.dtype == np.uint16:
-    return feature_pb2.Feature(
-        bytes_list=feature_pb2.BytesList(value=[array.tobytes()])
-    )
-  elif array.dtype == np.bool_:
-    return feature_pb2.Feature(
-        int64_list=feature_pb2.Int64List(value=array.astype(np.int64).flatten())
-    )
-  elif np.issubdtype(array.dtype, np.str_) or array.dtype == np.object_:
-    # Handle string types. Environment spec defines string array as
-    # dtype=object.
-    byte_arrays = [s.encode("utf-8") for s in array.flatten()]
-    return feature_pb2.Feature(
-        bytes_list=feature_pb2.BytesList(value=byte_arrays)
-    )
-  else:
-    raise ValueError(f"Unsupported numpy dtype: {array.dtype}")
-
-
-def _encode_image_to_jpeg(array: np.ndarray) -> bytes:
-  """Encodes a numpy array to a JPEG image."""
-  img = Image.fromarray(array)
-  with io.BytesIO() as output_stream:
-    img.save(output_stream, format="JPEG")
-    jpeg_bytes = output_stream.getvalue()
-  return jpeg_bytes
-
-
-def _dict_to_example(
-    data_dict: Mapping[str, np.ndarray],
-    image_observation_keys: list[str] | None = None,
-) -> example_pb2.Example:
-  """Converts a dictionary of numpy arrays to a TensorFlow Example."""
-  features = {}
-  for key, value in data_dict.items():
-    if (
-        image_observation_keys
-        and key.startswith(constants.OBSERVATION_KEY_PREFIX)
-        and key.split("/")[-1] in image_observation_keys
-    ):
-      features[key] = feature_pb2.Feature(
-          bytes_list=feature_pb2.BytesList(value=[_encode_image_to_jpeg(value)])
-      )
-    else:
-      features[key] = _np_array_to_feature(value)
-  return example_pb2.Example(features=feature_pb2.Features(feature=features))
-
 
 def _validate_metadata(
-    image_observation_keys: list[str],
-    proprioceptive_observation_keys: list[str],
+    image_observation_keys: Sequence[str],
+    proprioceptive_observation_keys: Sequence[str],
     timestep_spec: gdmr_types.TimeStepSpec,
     action_spec: gdmr_types.ActionSpec,
 ) -> None:
@@ -649,18 +780,24 @@ def _validate_instruction_in_timestep(
     timestep_spec: gdmr_types.TimeStepSpec,
 ) -> None:
   if "instruction" not in timestep_spec.observation:
-    raise KeyError(
-        "'instruction' is required in timestep_spec.observation."
-    )
+    raise KeyError("'instruction' is required in timestep_spec.observation.")
 
 
 def _validate_action(action_spec: gdmr_types.ActionSpec):
-  if not isinstance(action_spec, specs.BoundedArray):
-    raise TypeError("action_spec must be a BoundedArray.")
+  if isinstance(action_spec, Mapping):
+    for _, value in action_spec.items():
+      if not isinstance(value, specs.BoundedArray):
+        raise TypeError("action_spec must be a mapping of BoundedArrays.")
+  else:
+    if not isinstance(action_spec, specs.BoundedArray):
+      raise TypeError(
+          "action_spec must be a BoundedArray or a Mapping of BoundedArrays."
+      )
 
 
 def _validate_image_observation_keys(
-    timestep_spec: gdmr_types.TimeStepSpec, image_observation_keys: list[str]
+    timestep_spec: gdmr_types.TimeStepSpec,
+    image_observation_keys: Sequence[str],
 ) -> None:
   """Validates that the camera names are listed in the observation spec."""
   if not image_observation_keys:
@@ -674,7 +811,7 @@ def _validate_image_observation_keys(
 
 def _validate_proprioceptive_observation_keys(
     timestep_spec: gdmr_types.TimeStepSpec,
-    proprioceptive_observation_keys: list[str],
+    proprioceptive_observation_keys: Sequence[str],
 ) -> None:
   """Validates that the proprio key is listed in the observation spec."""
   if not proprioceptive_observation_keys:

@@ -38,3 +38,6 @@ CONDITIONING_ENCODED_OBS_KEY = "conditioning"
 
 # Key for the task instruction in the encoded observation.
 TASK_INSTRUCTION_ENCODED_OBS_KEY = "task_instruction"
+
+# Key for the action chunk in the response.
+ACTION_CHUNK_RESPONSE_KEY = "action_chunk"

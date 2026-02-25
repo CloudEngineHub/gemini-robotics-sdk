@@ -17,7 +17,7 @@
 import os
 
 # Environment variable name to extract the robot ID.
-_DEFAULT_ROBOT_ID_IN_SYSTEM_ENV = "GA_ROBOT_ID"
+DEFAULT_ROBOT_ID_IN_SYSTEM_ENV = "GA_ROBOT_ID"
 
 
 def get_system_env_variable(var_name: str) -> str:
@@ -26,7 +26,7 @@ def get_system_env_variable(var_name: str) -> str:
 
 
 def get_robot_id_from_system_env(
-    var_name: str = _DEFAULT_ROBOT_ID_IN_SYSTEM_ENV,
+    var_name: str = DEFAULT_ROBOT_ID_IN_SYSTEM_ENV,
 ) -> str:
   """Gets the robot ID from the system environment variable."""
   return get_system_env_variable(var_name=var_name)

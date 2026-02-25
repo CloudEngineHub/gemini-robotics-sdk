@@ -30,11 +30,12 @@ ARECORD_CMD = [
     "-r",
     str(INPUT_RATE),
     "-c",
-    "1",  # 6 channels needed for localisation
+    "1",
     "-f",
     "S16_LE",
     "-t",
     "raw",
+    "--buffer-time=100000",
 ]
 INPUT_CHUNK_SIZE = 1024
 
@@ -51,6 +52,7 @@ APLAY_CMD = [
     "S16_LE",
     "-t",
     "raw",
+    "--buffer-time=100000",
 ]
 
 

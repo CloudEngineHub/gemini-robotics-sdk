@@ -12,34 +12,85 @@
 #  See the License for the specific language governing permissions and
 #  limitations under the License.
 
-"""Provides a terminal-based user interface for interacting with the event bus."""
+"""Terminal UI shell for hosting UI handlers and managing text input."""
 
 import asyncio
+from collections.abc import Callable
+from typing import Any
 
 from absl import logging
 
 from safari_sdk.agent.framework import config as framework_config
+from safari_sdk.agent.framework import types
 from safari_sdk.agent.framework.event_bus import event_bus
+from safari_sdk.agent.framework.ui import default_ui
+from safari_sdk.agent.framework.ui import operator_text_ui
 
 
-TERMINAL_COLOR_GREEN = "\033[92m"
-TERMINAL_COLOR_YELLOW = "\033[93m"
-TERMINAL_COLOR_RED = "\033[91m"
-TERMINAL_COLOR_BLUE = "\033[94m"
-TERMINAL_COLOR_ORANGE = "\033[38;5;208m"
-TERMINAL_COLOR_RESET = "\033[0m"
+UIHandler = Callable[[event_bus.Event], None]
 
 
-COLOR_MAP = {
-    event_bus.EventType.TOOL_CALL: TERMINAL_COLOR_GREEN,
-    event_bus.EventType.TOOL_RESULT: TERMINAL_COLOR_ORANGE,
-    event_bus.EventType.TOOL_CALL_CANCELLATION: TERMINAL_COLOR_RED,
-    event_bus.EventType.MODEL_TURN: TERMINAL_COLOR_BLUE,
+def _noop_handler(event: event_bus.Event) -> None:
+  del event
+
+
+EXTERNAL_UI_HANDLERS: dict[types.ExternalUIType, UIHandler] = {
+    types.ExternalUIType.NONE: _noop_handler,
+    types.ExternalUIType.OPERATOR_DATA_COLLECT: operator_text_ui.handle_event,
 }
 
 
+def parse_user_input_to_event(
+    message: str,
+    source: event_bus.EventSource,
+    default_metadata: dict[str, Any] | None = None,
+) -> event_bus.Event:
+  """Parses user input message and creates the appropriate event.
+
+  Handles special prefixes:
+    - "@d": Creates a DEBUG event
+    - "@s": Creates a SUCCESS_SIGNAL event with data=True
+    - "@f": Creates a SUCCESS_SIGNAL event with data=False
+    - Otherwise: Creates a MODEL_TEXT_INPUT event
+
+  Args:
+    message: The user input message.
+    source: The source of the event.
+    default_metadata: Optional metadata to include for MODEL_TEXT_INPUT events.
+
+  Returns:
+    The appropriate Event based on the message content.
+  """
+  event_type = event_bus.EventType.MODEL_TEXT_INPUT
+  data = message
+  metadata = default_metadata or {}
+
+  if message.strip() == "/context":
+    event_type = event_bus.EventType.DEBUG
+    metadata = {"command": "context_dump"}
+  elif "@d" in message:
+    event_type = event_bus.EventType.DEBUG
+    debug_msg = message.replace("@d ", "").replace("@d", "")
+    metadata = {"debug_message": debug_msg}
+    if "/context" in debug_msg:
+      metadata["command"] = "context_dump"
+  elif "@s" in message:
+    event_type = event_bus.EventType.SUCCESS_SIGNAL
+    data = True
+  elif "@f" in message:
+    event_type = event_bus.EventType.SUCCESS_SIGNAL
+    data = False
+
+  return event_bus.Event(
+      type=event_type,
+      source=source,
+      data=data,
+      metadata=metadata,
+  )
+
+
 class TerminalUI:
-  """Handles user input from the terminal and displays relevant events from the event bus."""
+  """Shell for hosting UI handlers and managing text input from the terminal."""
 
   def __init__(
       self,
@@ -50,51 +101,31 @@ class TerminalUI:
     self._text_input_listener_task = None
     self._send_reminder_text_input_tasks = []
     self._bus = bus
-    if self._config.use_operator_friendly_terminal_ui:
-      print_text_output_events_handler = (
-          self._print_text_output_events_operator_friendly
-      )
-      print_model_turn_event_handler = (
-          self._print_model_turn_event_operator_friendly
-      )
-      print_model_turn_completion_handler = (
-          self._print_model_turn_completion_operator_friendly
-      )
-      text_output_events_to_handle = [
-          event_bus.EventType.TOOL_CALL,
-          event_bus.EventType.TOOL_CALL_CANCELLATION,
-          event_bus.EventType.TOOL_RESULT,
-      ]
-    else:
-      print_text_output_events_handler = self._print_text_output_events
-      print_model_turn_event_handler = self._print_model_turn_event
-      print_model_turn_completion_handler = (
-          self._print_model_turn_completion
-      )
-      text_output_events_to_handle = [
-          event_bus.EventType.TOOL_CALL,
-          event_bus.EventType.TOOL_CALL_CANCELLATION,
-          event_bus.EventType.TOOL_RESULT,
-          event_bus.EventType.GO_AWAY,
-          event_bus.EventType.DEBUG,
-          event_bus.EventType.OUTPUT_TRANSCRIPT,
-      ]
-    self._bus.subscribe(
-        event_types=[event_bus.EventType.MODEL_TURN],
-        handler=print_model_turn_event_handler,
+    self._external_ui_handler = EXTERNAL_UI_HANDLERS.get(
+        config.external_ui_type, _noop_handler
     )
+    all_events_to_handle = [
+        event_bus.EventType.MODEL_TURN,
+        event_bus.EventType.MODEL_TURN_COMPLETE,
+        event_bus.EventType.MODEL_TURN_INTERRUPTED,
+        event_bus.EventType.GENERATION_COMPLETE,
+        event_bus.EventType.TOOL_CALL,
+        event_bus.EventType.TOOL_CALL_CANCELLATION,
+        event_bus.EventType.TOOL_RESULT,
+        event_bus.EventType.GO_AWAY,
+        event_bus.EventType.DEBUG,
+    ]
+    if self._config.enable_audio_transcription:
+      all_events_to_handle.append(event_bus.EventType.OUTPUT_TRANSCRIPT)
     self._bus.subscribe(
-        event_types=[
-            event_bus.EventType.MODEL_TURN_COMPLETE,
-            event_bus.EventType.MODEL_TURN_INTERRUPTED,
-            event_bus.EventType.GENERATION_COMPLETE,
-        ],
-        handler=print_model_turn_completion_handler,
+        event_types=all_events_to_handle,
+        handler=self._handle_event,
     )
-    self._bus.subscribe(
-        event_types=text_output_events_to_handle,
-        handler=print_text_output_events_handler,
-    )
+
+  def _handle_event(self, event: event_bus.Event) -> None:
+    """Dispatches event to internal UI (always) and external UI (if configured)."""
+    default_ui.handle_event(event)
+    self._external_ui_handler(event)
 
   async def connect(self):
     """Connects the event bus to the terminal UI."""
@@ -145,128 +176,19 @@ class TerminalUI:
     )
     await self._bus.publish(event)
 
-  def _print_text_output_events(self, event: event_bus.Event):
-    """Handles text output events and prints them to the terminal."""
-    color = COLOR_MAP.get(event.type, "")
-    reset_color = TERMINAL_COLOR_RESET if color else ""
-    print(
-        f"{color}[{event.source.value}, {event.type.value}]:"
-        f" {event.data}{reset_color}"
-    )
-
-  def _print_text_output_events_operator_friendly(self, event: event_bus.Event):
-    """Handles text output events and prints them to the terminal."""
-    color = COLOR_MAP.get(event.type, "")
-    reset_color = TERMINAL_COLOR_RESET if color else ""
-    # Only print TOOL_CALL, TOOL_CALL_CANCELLATION, and TOOL_RESULT.
-    match event.type:
-      case event_bus.EventType.TOOL_CALL:
-        print(
-            "\n"
-            f"{color}[{event.type.value}]:"
-            f"{event.data.function_calls[0].args['instruction']}{reset_color}"
-        )
-      case event_bus.EventType.TOOL_RESULT:
-        print(
-            "\n"
-            f"{color}[{event.type.value}]:"
-            f"{event.data.function_responses[0].response}{reset_color}"
-        )
-      case event_bus.EventType.TOOL_CALL_CANCELLATION:
-        print(
-            "\n"
-            f"{color}[{event.type.value}]:{reset_color}"
-        )
-      case _:
-        # Only print TOOL_CALL, TOOL_CALL_CANCELLATION and TOOL_RESULT.
-        pass
-
-  def _print_model_turn_event(self, event: event_bus.Event):
-    """Handles model turn events and prints the parts to the terminal."""
-    color = COLOR_MAP.get(event.type, "")
-    reset_color = TERMINAL_COLOR_RESET if color else ""
-    for part in event.data.parts:
-      if part.text:
-        print(
-            f"{color}[{event.source.value}, {event.type.value} - text]: "
-            f"{part.text}{reset_color}"
-        )
-      if part.code_execution_result:
-        print(
-            f"{color}[{event.source.value}, {event.type.value} - code execution"
-            f" result]: {part.code_execution_result}{reset_color}"
-        )
-      elif part.executable_code:
-        print(
-            f"{color}"
-            f"[{event.source.value}, {event.type.value} - executable code]:"
-            f" {part.executable_code}{reset_color}"
-        )
-
-  def _print_model_turn_event_operator_friendly(self, event: event_bus.Event):
-    """Handles model turn events and prints the parts to the terminal."""
-    color = COLOR_MAP.get(event.type, "")
-    reset_color = TERMINAL_COLOR_RESET if color else ""
-    for part in event.data.parts:
-      # Only print text parts.
-      if part.text:
-        # No newline to append adjacent text events.
-        print(f"{color}{part.text}{reset_color}", end="")
-
-  def _print_model_turn_completion(self, event: event_bus.Event):
-    """Handles model turn completion events and prints them to the terminal."""
-    print(f"[{event.source.value}, {event.type.value}]")
-
-  def _print_model_turn_completion_operator_friendly(
-      self, event: event_bus.Event
-  ):
-    """Handles model turn completion events and prints them to the terminal."""
-    # Only print MODEL_TURN_COMPLETE.
-    if event.type == event_bus.EventType.MODEL_TURN_COMPLETE:
-      print(f"\n[{event.type.value}]")
-
   async def text_input_loop(self, bus: event_bus.EventBus):
     """Handles text input events and publishes them to the event bus."""
     while True:
       try:
-        # Use asyncio.to_thread to run the blocking input() call
-        # in a separate thread without blocking the main event loop.
         message = await asyncio.to_thread(input, "\n[USER]: ")
-        if message and message.strip():  # Don't send empty messages
-          # Debug message event (starting w/ "@debug"), send as a debug event.
-          if "@d" in message:
-            debug_message = message.replace("@d ", "").replace("@d", "")
-            event = event_bus.Event(
-                type=event_bus.EventType.DEBUG,
-                source=event_bus.EventSource.USER,
-                data=message,
-                metadata={"debug_message": debug_message},
-            )
-          # Send as a success signal event with success=True.
-          elif "@s" in message:
-            event = event_bus.Event(
-                type=event_bus.EventType.SUCCESS_SIGNAL,
-                source=event_bus.EventSource.USER,
-                data=True,
-            )
-          # Send as a success signal event with success=False.
-          elif "@f" in message:
-            event = event_bus.Event(
-                type=event_bus.EventType.SUCCESS_SIGNAL,
-                source=event_bus.EventSource.USER,
-                data=False,
-            )
-          else:  # Normal event, sent model text input.
-            event = event_bus.Event(
-                type=event_bus.EventType.MODEL_TEXT_INPUT,
-                source=event_bus.EventSource.USER,
-                data=message,
-            )
+        if message and message.strip():
+          event = parse_user_input_to_event(
+              message=message, source=event_bus.EventSource.USER
+          )
           await bus.publish(event)
       except (RuntimeError, KeyboardInterrupt):
         logging.info("Text input loop shutting down.")
         return
-      except Exception as e:  # pylint: disable=broad-exception-caught
+      except Exception as e:  # pylint: disable=broad-except
         logging.exception("Error in text input loop: %s", e)
         return
-

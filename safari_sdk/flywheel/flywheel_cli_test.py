@@ -17,10 +17,12 @@
 import io
 import json
 import os
+import pathlib
 import tempfile
 from unittest import mock
 import urllib.error
 
+from absl import flags
 from absl.testing import flagsaver
 from absl.testing import parameterized
 
@@ -760,10 +762,66 @@ class FlywheelCliTest(parameterized.TestCase):
           },
           ValueError,
       ),
+      (
+          "download_bad_artifact_id_with_period",
+          "download",
+          {
+              "api_key": "test_api_key",
+              "artifact_id": "test.pb",
+          },
+          ValueError,
+      ),
+      (
+          "download_bad_artifact_id_starts_with_hyphen",
+          "download",
+          {
+              "api_key": "test_api_key",
+              "artifact_id": "-invalid_id",
+          },
+          ValueError,
+      ),
+      (
+          "download_bad_artifact_id_too_short",
+          "download",
+          {
+              "api_key": "test_api_key",
+              "artifact_id": "a",
+          },
+          ValueError,
+      ),
+      (
+          "download_bad_artifact_id_too_long",
+          "download",
+          {
+              "api_key": "test_api_key",
+              "artifact_id": "a" * 37,
+          },
+          ValueError,
+      ),
+      (
+          "upload_data_bad_robot_id_too_long",
+          "upload_data",
+          {
+              "api_key": "test_api_key",
+              "upload_data_robot_id": "a" * 64,
+              "upload_data_directory": "/tmp/data",
+          },
+          flags.IllegalFlagValueError,
+      ),
+      (
+          "upload_data_bad_robot_id_bad_chars",
+          "upload_data",
+          {
+              "api_key": "test_api_key",
+              "upload_data_robot_id": "bad/id",
+              "upload_data_directory": "/tmp/data",
+          },
+          flags.IllegalFlagValueError,
+      ),
   )
   def test_parse_flags_errors(self, command, params, expected_exception):
-    with flagsaver.flagsaver(**params):
-      with self.assertRaises(expected_exception):
+    with self.assertRaises(expected_exception):
+      with flagsaver.flagsaver(**params):
         self._cli.parse_flag(command)
 
   @parameterized.named_parameters(
@@ -827,6 +885,14 @@ class FlywheelCliTest(parameterized.TestCase):
           },
       ),
       (
+          "download_valid_artifact_id",
+          "download",
+          {
+              "api_key": "test_api_key",
+              "artifact_id": "valid_artifact_id",
+          },
+      ),
+      (
           "version",
           "version",
           {
@@ -838,6 +904,15 @@ class FlywheelCliTest(parameterized.TestCase):
           "help",
           {
               "api_key": "test_api_key",
+          },
+      ),
+      (
+          "upload_data",
+          "upload_data",
+          {
+              "api_key": "test_api_key",
+              "upload_data_robot_id": "valid_id",
+              "upload_data_directory": "/tmp/data",
           },
       ),
   )
@@ -928,6 +1003,92 @@ class FlywheelCliTest(parameterized.TestCase):
         " error>",
         mock_stdout.getvalue(),
     )
+
+
+class ResolveDownloadPathTest(parameterized.TestCase):
+  """Tests for the _resolve_download_path helper function."""
+
+  @mock.patch("pathlib.Path.expanduser")
+  @mock.patch("pathlib.Path.is_dir")
+  def test_tilde_expansion_to_existing_directory(
+      self, mock_is_dir, mock_expanduser
+  ):
+    """Tests tilde expansion when the resolved path is an existing directory."""
+    # Mock expanduser to simulate ~ -> /home/testuser
+    mock_expanduser.return_value = pathlib.Path("/home/testuser/Downloads")
+    mock_is_dir.return_value = True
+
+    result = flywheel_cli._resolve_download_path(
+        "~/Downloads", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(
+        result, "/home/testuser/Downloads/flywheel_checkpoint.ckpt"
+    )
+
+  @mock.patch("pathlib.Path.expanduser")
+  @mock.patch("pathlib.Path.is_dir")
+  def test_tilde_expansion_to_nonexistent_path(
+      self, mock_is_dir, mock_expanduser
+  ):
+    """Tests tilde expansion when the resolved path does not exist."""
+    mock_expanduser.return_value = pathlib.Path("/home/testuser/new_file.ckpt")
+    mock_is_dir.return_value = False
+
+    result = flywheel_cli._resolve_download_path(
+        "~/new_file.ckpt", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/home/testuser/new_file.ckpt")
+
+  @mock.patch("pathlib.Path.is_dir")
+  def test_existing_directory_input(self, mock_is_dir):
+    """Tests that an existing directory gets the default filename appended."""
+    mock_is_dir.return_value = True
+
+    result = flywheel_cli._resolve_download_path(
+        "/tmp/models", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/tmp/models/flywheel_checkpoint.ckpt")
+
+  @mock.patch("pathlib.Path.is_dir")
+  def test_existing_file_input(self, mock_is_dir):
+    """Tests that an existing file path remains unchanged."""
+    mock_is_dir.return_value = False
+
+    result = flywheel_cli._resolve_download_path(
+        "/tmp/existing_file.ckpt", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/tmp/existing_file.ckpt")
+
+  @mock.patch("pathlib.Path.is_dir")
+  def test_nonexistent_path_input(self, mock_is_dir):
+    """Tests that a non-existent path remains unchanged."""
+    mock_is_dir.return_value = False
+
+    result = flywheel_cli._resolve_download_path(
+        "/tmp/new_dest", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/tmp/new_dest")
+
+  def test_empty_input(self):
+    """Tests that empty input returns the default full path."""
+    result = flywheel_cli._resolve_download_path(
+        None, "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/default/path/flywheel_checkpoint.ckpt")
+
+  def test_empty_string_input(self):
+    """Tests that empty string input returns the default full path."""
+    result = flywheel_cli._resolve_download_path(
+        "", "/default/path/flywheel_checkpoint.ckpt"
+    )
+
+    self.assertEqual(result, "/default/path/flywheel_checkpoint.ckpt")
 
 
 if __name__ == "__main__":

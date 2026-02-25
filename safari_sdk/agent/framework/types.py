@@ -64,6 +64,7 @@ class EventType(enum.Enum):
   #############################################################################
   # Other events.
   ##############################################################################
+  SYSTEM_MESSAGE = "SYSTEM_MESSAGE"
   MODEL_AUDIO_INPUT = "MODEL_AUDIO_INPUT"
   MODEL_IMAGE_INPUT = "MODEL_IMAGE_INPUT"
   MODEL_TEXT_INPUT = "MODEL_TEXT_INPUT"
@@ -78,8 +79,8 @@ class EventType(enum.Enum):
   # the status of the framework. This is typically used to indicate that the
   # agent has finished a overall task.
   FRAMEWORK_STATUS = "FRAMEWORK_STATUS"
-  LIVE_API_HEALTH = "LIVE_API_HEALTH"
-  GEMINI_CLIENT_HEALTH = "GEMINI_CLIENT_HEALTH"
+  ORCHESTRATOR_CLIENT_HEALTH = "ORCHESTRATOR_CLIENT_HEALTH"
+  TOOL_CLIENT_HEALTH = "TOOL_CLIENT_HEALTH"
   # This is an event that can be emitted by any entity to indicate a reset of
   # the framework. This can be used to reset the entire framework.
   RESET = "RESET"
@@ -93,6 +94,10 @@ class EventType(enum.Enum):
   # This event indicates a real-time audio has been sent to the model.
   # This is used to track the exact audio sent to Live API.
   REAL_TIME_AUDIO_SENT = "REAL_TIME_AUDIO_SENT"
+  # This is an event for Python logging messages (INFO, WARNING, ERROR) to be
+  # displayed in the web GUI.
+  SYSTEM_LOG = "SYSTEM_LOG"
+  CONTEXT_SNAPSHOT = "CONTEXT_SNAPSHOT"
 
 
 @dataclasses.dataclass(frozen=True)
@@ -147,3 +152,27 @@ class ControlMode(enum.Enum):
   """Enum for specifying the IO mode of the framework."""
 
   TERMINAL_ONLY = "TERMINAL_ONLY"
+  LAUNCH_SERVER = "LAUNCH_SERVER"
+  SERVER_AND_TERMINAL = "SERVER_AND_TERMINAL"
+
+
+@enum.unique
+class ExternalUIType(enum.Enum):
+  """Enum for specifying the external UI type for event printing."""
+
+  NONE = "NONE"
+  OPERATOR_DATA_COLLECT = "OPERATOR_DATA_COLLECT"
+
+
+@enum.unique
+class OrchestratorHandlerType(enum.Enum):
+  """Enum for specifying which orchestrator handler to use."""
+
+  STREAMING = "STREAMING"
+  NONSTREAMING_GENAI = "NONSTREAMING_GENAI"
+
+
+class SDStitchMode(enum.Enum):
+  NONE = "none"
+  CAMERA = "camera"
+  TIME = "time"

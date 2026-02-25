@@ -25,16 +25,60 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   @mock.patch(
       "safari_sdk.orchestrator.client.interface.OrchestratorInterface.connect",
-      return_value=orchestrator_helper.interface.RESPONSE(success=True),
+      return_value=orchestrator_helper.interface.RESPONSE(
+          success=True, robot_id="test_robot_id"
+      ),
   )
-  def test_connect_good(self, _):
+  def test_connect_robot_id_good(self, _):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
 
     response = helper_lib.connect()
     self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
+
+  @mock.patch(
+      "safari_sdk.orchestrator.client.interface.OrchestratorInterface.connect",
+      return_value=orchestrator_helper.interface.RESPONSE(
+          success=True, robot_id="test_robot_id"
+      ),
+  )
+  def test_connect_hostname_good(self, _):
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="",
+        hostname="test_hostname",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+    )
+
+    response = helper_lib.connect()
+    self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
+
+  def test_connect_no_robot_id_and_no_hostname_bad(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OrchestratorHelper: Either robot_id or hostname must be set.",
+    ):
+      orchestrator_helper.OrchestratorHelper(
+          robot_id="",
+          hostname="",
+          job_type=orchestrator_helper.JOB_TYPE.ALL,
+      )
+
+  def test_connect_both_robot_id_and_hostname_bad(self):
+    with self.assertRaisesRegex(
+        ValueError,
+        "OrchestratorHelper: Only one of robot_id or hostname should be set. If"
+        " you wish to use hostname instead of robot_id, please set the value of"
+        " robot_id as an empty string.",
+    ):
+      orchestrator_helper.OrchestratorHelper(
+          robot_id="test_robot_id",
+          hostname="test_hostname",
+          job_type=orchestrator_helper.JOB_TYPE.ALL,
+      )
 
   @mock.patch(
       "safari_sdk.orchestrator.client.interface.OrchestratorInterface.connect",
@@ -44,7 +88,7 @@ class OrchestratorHelperTest(absltest.TestCase):
   )
   def test_connect_bad_without_raise_error(self, _):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.COLLECTION,
     )
 
@@ -60,7 +104,7 @@ class OrchestratorHelperTest(absltest.TestCase):
   )
   def test_connect_bad_with_raise_error(self, _):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.EVALUATION,
         raise_error=True,
     )
@@ -92,7 +136,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_get_current_connection_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
 
@@ -104,7 +148,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_get_current_connection_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         raise_error=True,
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
@@ -121,7 +165,7 @@ class OrchestratorHelperTest(absltest.TestCase):
             success=True,
             robot_id="test_robot_id",
             is_operational=True,
-            operator_id="test_operator_id"
+            operator_id="test_operator_id",
         )
     )
     helper_lib = orchestrator_helper.OrchestratorHelper(
@@ -138,7 +182,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_get_current_robot_info_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
 
@@ -150,7 +194,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_get_current_robot_info_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
         raise_error=True,
     )
@@ -166,7 +210,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         orchestrator_helper.interface.RESPONSE(
             success=True,
             robot_id="test_robot_id",
-            operator_id="test_operator_id"
+            operator_id="test_operator_id",
         )
     )
     helper_lib = orchestrator_helper.OrchestratorHelper(
@@ -184,7 +228,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_set_current_robot_operator_id_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
 
@@ -198,7 +242,7 @@ class OrchestratorHelperTest(absltest.TestCase):
 
   def test_set_current_robot_operator_id_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
-        robot_id="",
+        robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
         raise_error=True,
     )
@@ -345,6 +389,44 @@ class OrchestratorHelperTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       helper_lib.get_current_work_unit()
 
+  def test_observe_latest_work_unit_good(self):
+    mock_interface = mock.create_autospec(
+        spec=orchestrator_helper.interface.OrchestratorInterface, instance=True
+    )
+    mock_interface.observe_latest_work_unit.return_value = (
+        orchestrator_helper.interface.RESPONSE(success=True)
+    )
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+    )
+    helper_lib._interface = mock_interface
+
+    response = helper_lib.observe_latest_work_unit()
+    self.assertTrue(response.success)
+
+  def test_observe_latest_work_unit_bad_without_raise_error(self):
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+    )
+
+    response = helper_lib.observe_latest_work_unit()
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+  def test_observe_latest_work_unit_bad_with_raise_error(self):
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+        raise_error=True,
+    )
+
+    with self.assertRaises(ValueError):
+      helper_lib.observe_latest_work_unit()
+
   def test_is_visual_overlay_in_current_work_unit_good(self):
     mock_interface = mock.create_autospec(
         spec=orchestrator_helper.interface.OrchestratorInterface, instance=True
@@ -374,9 +456,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     self.assertTrue(response.success)
     self.assertFalse(response.is_visual_overlay_found)
 
-  def test_is_visual_overlay_in_current_work_unit_bad_without_raise_error(
-      self
-  ):
+  def test_is_visual_overlay_in_current_work_unit_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -388,9 +468,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_is_visual_overlay_in_current_work_unit_bad_with_raise_error(
-      self
-  ):
+  def test_is_visual_overlay_in_current_work_unit_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -417,7 +495,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     self.assertTrue(response.success)
 
   def test_create_visual_overlays_for_current_work_unit_bad_without_raise_error(
-      self
+      self,
   ):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
@@ -431,7 +509,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
 
   def test_create_visual_overlays_for_current_work_unit_bad_with_raise_error(
-      self
+      self,
   ):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
@@ -449,7 +527,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     mock_interface.list_visual_overlay_renderer_keys.return_value = (
         orchestrator_helper.interface.RESPONSE(
             success=True,
-            visual_overlay_renderer_keys=["renderer_1", "renderer_2"]
+            visual_overlay_renderer_keys=["renderer_1", "renderer_2"],
         )
     )
     helper_lib = orchestrator_helper.OrchestratorHelper(
@@ -465,9 +543,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.visual_overlay_renderer_keys, ["renderer_1", "renderer_2"]
     )
 
-  def test_list_visual_overlay_renderer_keys_bad_without_raise_error(
-      self
-  ):
+  def test_list_visual_overlay_renderer_keys_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -479,9 +555,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_list_visual_overlay_renderer_keys_bad_with_raise_error(
-      self
-  ):
+  def test_list_visual_overlay_renderer_keys_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -507,9 +581,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     response = helper_lib.render_visual_overlay(renderer_key="renderer_1")
     self.assertTrue(response.success)
 
-  def test_render_visual_overlay_bad_without_raise_error(
-      self
-  ):
+  def test_render_visual_overlay_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -521,9 +593,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_render_visual_overlay_bad_with_raise_error(
-      self
-  ):
+  def test_render_visual_overlay_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -560,9 +630,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         orchestrator_helper.interface.api_response.Image.Image,
     )
 
-  def test_get_visual_overlay_image_as_pil_image_bad_without_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_pil_image_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -576,9 +644,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_get_visual_overlay_image_as_pil_image_bad_with_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_pil_image_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -617,9 +683,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         orchestrator_helper.interface.api_response.np.ndarray,
     )
 
-  def test_get_visual_overlay_image_as_np_array_bad_without_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_np_array_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -633,9 +697,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_get_visual_overlay_image_as_np_array_bad_with_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_np_array_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -643,9 +705,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
 
     with self.assertRaises(ValueError):
-      helper_lib.get_visual_overlay_image_as_np_array(
-          renderer_key="renderer_1"
-      )
+      helper_lib.get_visual_overlay_image_as_np_array(renderer_key="renderer_1")
 
   def test_get_visual_overlay_image_as_bytes_good(self):
     mock_interface = mock.create_autospec(
@@ -669,9 +729,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     self.assertTrue(response.success)
     self.assertIsInstance(response.visual_overlay_image, bytes)
 
-  def test_get_visual_overlay_image_as_bytes_bad_without_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_bytes_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -685,9 +743,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_get_visual_overlay_image_as_bytes_bad_with_raise_error(
-      self
-  ):
+  def test_get_visual_overlay_image_as_bytes_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -695,9 +751,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
 
     with self.assertRaises(ValueError):
-      helper_lib.get_visual_overlay_image_as_bytes(
-          renderer_key="renderer_1"
-      )
+      helper_lib.get_visual_overlay_image_as_bytes(renderer_key="renderer_1")
 
   def test_reset_visual_overlay_renderer_good(self):
     mock_interface = mock.create_autospec(
@@ -722,9 +776,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
     self.assertTrue(response.success)
 
-  def test_reset_visual_overlay_renderer_bad_without_raise_error(
-      self
-  ):
+  def test_reset_visual_overlay_renderer_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -738,9 +790,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_reset_visual_overlay_renderer_bad_with_raise_error(
-      self
-  ):
+  def test_reset_visual_overlay_renderer_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -748,9 +798,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
 
     with self.assertRaises(ValueError):
-      helper_lib.reset_visual_overlay_renderer(
-          renderer_key="renderer_1"
-      )
+      helper_lib.reset_visual_overlay_renderer(renderer_key="renderer_1")
 
   def test_create_single_visual_overlay_renderer_good(self):
     mock_interface = mock.create_autospec(
@@ -773,9 +821,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
     self.assertTrue(response.success)
 
-  def test_create_single_visual_overlay_renderer_bad_without_raise_error(
-      self
-  ):
+  def test_create_single_visual_overlay_renderer_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -792,9 +838,7 @@ class OrchestratorHelperTest(absltest.TestCase):
         response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
     )
 
-  def test_create_single_visual_overlay_renderer_bad_with_raise_error(
-      self
-  ):
+  def test_create_single_visual_overlay_renderer_bad_with_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
         job_type=orchestrator_helper.JOB_TYPE.ALL,
@@ -836,7 +880,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     self.assertTrue(response.success)
 
   def test_add_single_overlay_object_to_visual_overlay_bad_without_raise_error(
-      self
+      self,
   ):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
@@ -860,7 +904,7 @@ class OrchestratorHelperTest(absltest.TestCase):
     )
 
   def test_add_single_overlay_object_to_visual_overlay_bad_with_raise_error(
-      self
+      self,
   ):
     helper_lib = orchestrator_helper.OrchestratorHelper(
         robot_id="test_robot_id",
@@ -995,6 +1039,59 @@ class OrchestratorHelperTest(absltest.TestCase):
     with self.assertRaises(ValueError):
       helper_lib.start_work_unit_execution()
 
+  def test_insert_session_info_good(self):
+    mock_interface = mock.create_autospec(
+        spec=orchestrator_helper.interface.OrchestratorInterface, instance=True
+    )
+    mock_interface.robot_job_work_unit_insert_session_info.return_value = (
+        orchestrator_helper.interface.RESPONSE(success=True)
+    )
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+    )
+    helper_lib._interface = mock_interface
+
+    response = helper_lib.insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertTrue(response.success)
+
+  def test_insert_session_info_bad_without_raise_error(self):
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+    )
+
+    response = helper_lib.insert_session_info(
+        session_log_type="test_session_log_type",
+        session_start_time_ns=1764547200000000001,
+        session_end_time_ns=1764547210000000002,
+        session_note="test_note",
+    )
+    self.assertFalse(response.success)
+    self.assertEqual(
+        response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
+    )
+
+  def test_insert_session_info_bad_with_raise_error(self):
+    helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="test_robot_id",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+        raise_error=True,
+    )
+
+    with self.assertRaises(ValueError):
+      helper_lib.insert_session_info(
+          session_log_type="test_session_log_type",
+          session_start_time_ns=1764547200000000001,
+          session_end_time_ns=1764547210000000002,
+          session_note="test_note",
+      )
+
   def test_complete_work_unit_good(self):
     mock_interface = mock.create_autospec(
         spec=orchestrator_helper.interface.OrchestratorInterface, instance=True
@@ -1010,9 +1107,82 @@ class OrchestratorHelperTest(absltest.TestCase):
 
     response = helper_lib.complete_work_unit(
         outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        note="test_note",
+    )
+    self.assertTrue(response.success)
+
+    response = helper_lib.complete_work_unit(
+        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
         success_score=0.5,
         success_score_definition="test_success_score_definition",
         note="test_note",
+    )
+    self.assertTrue(response.success)
+
+    response = helper_lib.complete_work_unit(
+        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        session_start_time_ns=123456789,
+        session_end_time_ns=987654321,
+        session_log_type="test_session_log_type",
+        note="test_note",
+    )
+    self.assertTrue(response.success)
+
+    response = helper_lib.complete_work_unit(
+        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        success_score=0.5,
+        success_score_definition="test_success_score_definition",
+        session_start_time_ns=123456789,
+        session_end_time_ns=987654321,
+        session_log_type="test_session_log_type",
+        note="test_note",
+    )
+    self.assertTrue(response.success)
+
+    response = helper_lib.complete_work_unit(
+        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        note="test_note",
+        response_to_questions=[
+            orchestrator_helper.WORK_UNIT_QUESTION(
+                question="test_question_1",
+                whenToAsk=[
+                    orchestrator_helper.QUESTION_CONDITION.QUESTION_CONDITION_ALWAYS,
+                ],
+                answerFormat=orchestrator_helper.QUESTION_ANSWER_TYPE.ANSWER_TYPE_SINGLE_CHOICE,
+                allowedAnswers=[
+                    "test_allowed_answer_1",
+                    "test_allowed_answer_2",
+                ],
+                userAnswers=["test_user_answer_1"],
+                wasDisplayed=True,
+            ),
+        ],
+    )
+    self.assertTrue(response.success)
+
+    response = helper_lib.complete_work_unit(
+        outcome=orchestrator_helper.WORK_UNIT_OUTCOME.WORK_UNIT_OUTCOME_SUCCESS,
+        success_score=0.5,
+        success_score_definition="test_success_score_definition",
+        session_start_time_ns=123456789,
+        session_end_time_ns=987654321,
+        session_log_type="test_session_log_type",
+        note="test_note",
+        response_to_questions=[
+            orchestrator_helper.WORK_UNIT_QUESTION(
+                question="test_question_1",
+                whenToAsk=[
+                    orchestrator_helper.QUESTION_CONDITION.QUESTION_CONDITION_ALWAYS,
+                ],
+                answerFormat=orchestrator_helper.QUESTION_ANSWER_TYPE.ANSWER_TYPE_SINGLE_CHOICE,
+                allowedAnswers=[
+                    "test_allowed_answer_1",
+                    "test_allowed_answer_2",
+                ],
+                userAnswers=["test_user_answer_1"],
+                wasDisplayed=True,
+            ),
+        ],
     )
     self.assertTrue(response.success)
 
@@ -1124,6 +1294,54 @@ class OrchestratorHelperTest(absltest.TestCase):
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
     helper_lib._interface = mock_interface
+
+
+class OrchestratorHelperTestWithMockInterface(absltest.TestCase):
+  """Tests for OrchestratorHelper with an overridden interface."""
+
+  helper_lib: orchestrator_helper.OrchestratorHelper | None = None
+
+  class FakeOrchestratorInterface(
+      orchestrator_helper.interface.OrchestratorInterface
+  ):
+    """Fake OrchestratorInterface for testing."""
+
+    def __init__(
+        self,
+        robot_id: str,
+        job_type: orchestrator_helper.JOB_TYPE,
+        hostname: str | None = None,
+        observer_mode: bool = False,
+    ):
+      super().__init__(
+          robot_id=robot_id,
+          job_type=job_type,
+          hostname=hostname,
+          observer_mode=observer_mode,
+      )
+
+    def connect(self) -> orchestrator_helper.RESPONSE:
+      return orchestrator_helper.RESPONSE(
+          success=True,
+          robot_id="test_robot_id",
+      )
+
+    def disconnect(self) -> None:
+      return
+
+  def setUp(self):
+    super().setUp()
+    self.helper_lib = orchestrator_helper.OrchestratorHelper(
+        robot_id="",
+        hostname="test_hostname",
+        job_type=orchestrator_helper.JOB_TYPE.ALL,
+        interface_type=self.FakeOrchestratorInterface,
+    )
+
+  def test_connects_and_gets_robot_id(self):
+    response = self.helper_lib.connect()
+    self.assertTrue(response.success)
+    self.assertEqual(response.robot_id, "test_robot_id")
 
 
 if __name__ == "__main__":

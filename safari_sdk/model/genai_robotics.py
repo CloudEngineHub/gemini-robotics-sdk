@@ -134,10 +134,29 @@ class Client:
       api_key: str | None = None,
       method_name: str = 'sample_actions_json_flat',
       image_compression_jpeg_quality: int = 95,
+      num_retries: int = 1,
       **kwargs,
   ):
+    """Initializes the GenAI Robotics Client.
+
+    Args:
+      robotics_api_connection: The type of connection to use for the robotics
+        API. Defaults to `_CONNECTION.CLOUD`.
+      api_key: The API key to use for `_CONNECTION.CLOUD_GENAI`. If None, it
+        will be fetched using `auth.get_api_key()`.
+      method_name: The method name to call on the robotics API. Only used for
+        `_CONNECTION.CLOUD`.
+      image_compression_jpeg_quality: The quality level (0-100) to use when
+        compressing images to JPEG. Only used for `_CONNECTION.CLOUD` and
+        `_CONNECTION.LOCAL`.
+      num_retries: The number of times to retry HTTP calls to the cloud if it
+        fails. Only used for `_CONNECTION.CLOUD`.
+      **kwargs: Additional keyword arguments to pass to the `genai.Client` when
+        using `_CONNECTION.CLOUD_GENAI`.
+    """
     self._method_name = method_name
     self._robotics_api_connection = robotics_api_connection
+    self._num_retries = num_retries
     match self._robotics_api_connection:
       case _CONNECTION.CLOUD:
         service = auth.get_service()
@@ -173,14 +192,22 @@ class Client:
       image_compression_jpeg_quality: int = 95,
   ) -> types.GenerateContentResponse:
     """Generate content using the robotics API."""
-    del config
-
     if not isinstance(contents, list):
       raise ValueError('contents must be a list of items.')
     if not isinstance(contents[-1], str):
       raise ValueError(
           'contents[-1] must be a JSON string representing the observations.'
       )
+
+    # Only GenerateContentConfig type is supported for now.
+    # Only the timeout option in the config is supported for now.
+    timeout_ms = None
+    if (
+        config
+        and isinstance(config, types.GenerateContentConfig)
+        and config.http_options
+    ):
+      timeout_ms = config.http_options.timeout
 
     query = {}
     try:
@@ -226,9 +253,16 @@ class Client:
             ),
             'requestId': time.time_ns(),
         }
+        if timeout_ms:
+          timeout_seconds = timeout_ms // 1000
+          timeout_nanos = (timeout_ms % 1000) * 1000000
+          req_body['modelOptions'] = {
+              'timeout': {'seconds': timeout_seconds, 'nanos': timeout_nanos}
+          }
+
         logging.debug('Request: %s', req_body)
         req = self._client.cmCustom(body=req_body)  # pytype: disable=attribute-error
-        res = req.execute()
+        res = req.execute(num_retries=self._num_retries)
         logging.debug('Response: %s', res)
         response = lambda: None
         response.text = base64.b64decode(res['outputBytes']).decode('utf-8')

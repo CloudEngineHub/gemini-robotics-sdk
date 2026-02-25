@@ -33,10 +33,10 @@ from safari_sdk.agent.framework.tools import genai_client
 from safari_sdk.agent.framework.tools import image_buffer
 from safari_sdk.agent.framework.tools import tool
 
-_TASK_SUCCESS_KEY = "task_success"
-_OVERALL_TASK_SUCCESS_KEY = "overall_task_success"
-_TIMEOUT_KEY = "timeout"
-_REASON_KEY = "reason"
+TASK_SUCCESS_KEY = "task_success"
+OVERALL_TASK_SUCCESS_KEY = "overall_task_success"
+TIMEOUT_KEY = "timeout"
+REASON_KEY = "reason"
 
 _GUIDED_THINKING_SD_QUESTIONS = """
   Q1 Tell me about the state of task relevent objects at each time by combining all views to form a complete picture.
@@ -203,12 +203,24 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
         model_name=config.sd_model_name,
         config=types.GenerateContentConfig(
             temperature=config.sd_temperature,
+            max_output_tokens=config.sd_max_output_tokens,
+            media_resolution=config.sd_media_resolution,
             thinking_config=types.ThinkingConfig(
                 include_thoughts=False,
-                thinking_budget=config.sd_thinking_budget,
+                thinking_level=(
+                    types.ThinkingLevel(config.sd_thinking_level)
+                    if config.sd_thinking_level
+                    else None
+                ),
+                thinking_budget=(
+                    config.sd_thinking_budget
+                    if not config.sd_thinking_level
+                    else None
+                ),
             ),
         ),
         print_raw_response=config.sd_print_raw_sd_response,
+        tool_name="SubtaskSuccessDetectorV4",
     )
     self._task = None
     self._image_buffer.reset_start_images_map()
@@ -247,14 +259,14 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
     # Check if the task is successful.
     background_tasks = set()
     response = types.FunctionResponse(
-        response={_TASK_SUCCESS_KEY: True, _TIMEOUT_KEY: False},
+        response={TASK_SUCCESS_KEY: True, TIMEOUT_KEY: False},
         will_continue=False,
     )
     while not self._success_signal:
       # Check if the tool call is cancelled.
       if self._tool_call_cancelled:
         response = types.FunctionResponse(
-            response={_TASK_SUCCESS_KEY: False, _TIMEOUT_KEY: False},
+            response={TASK_SUCCESS_KEY: False, TIMEOUT_KEY: False},
             will_continue=False,
         )
         break
@@ -262,8 +274,8 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
       if self._external_success_signal is not None:
         response = types.FunctionResponse(
             response={
-                _TASK_SUCCESS_KEY: self._external_success_signal,
-                _TIMEOUT_KEY: False,
+                TASK_SUCCESS_KEY: self._external_success_signal,
+                TIMEOUT_KEY: False,
             },
             will_continue=False,
         )
@@ -272,7 +284,7 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
       if time.time() > end_time:
         logging.info("SD: Timed out after %s seconds.", timeout_seconds)
         response = types.FunctionResponse(
-            response={_TASK_SUCCESS_KEY: False, _TIMEOUT_KEY: True},
+            response={TASK_SUCCESS_KEY: False, TIMEOUT_KEY: True},
             will_continue=False,
         )
         break

@@ -17,32 +17,20 @@
 from collections.abc import Iterable, Sequence
 from concurrent import futures
 import copy
-import json
 import logging
 import threading
-from typing import Any
 
-from absl import flags
 import dm_env
 from dm_env import specs
 from gdm_robotics.interfaces import policy as gdmr_policy
 from gdm_robotics.interfaces import types as gdmr_types
-import grpc
 import numpy as np
 import tree
 from typing_extensions import override
 
 from safari_sdk.model import additional_observations_provider
 from safari_sdk.model import constants
-from safari_sdk.model import genai_robotics
-from safari_sdk.model import observation_to_model_query_contents
-
-
-_ENABLE_SERVER_INIT = flags.DEFINE_bool(
-    'safari_enable_server_init',
-    False,
-    'Whether to enable server init.',
-)
+from safari_sdk.model import remote_model_interface
 
 
 class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
@@ -61,6 +49,8 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
       ] = (),
       robotics_api_connection: constants.RoboticsApiConnectionType = constants.RoboticsApiConnectionType.CLOUD,
       image_compression_jpeg_quality: int = 95,
+      num_retries: int = 1,
+      action_conditioning_chunk_length: int | None = None,
   ):
     """Initializes the evaluation policy.
 
@@ -86,8 +76,14 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
         observations.
       robotics_api_connection: Connection type for the Robotics API.
       image_compression_jpeg_quality: The JPEG quality for encoding images.
+      num_retries: The number of retries for inference calls to the server when
+        the connection is CLOUD.
+      action_conditioning_chunk_length: Controls the length of the action chunk
+        that is used to condition the model from the available action chunk when
+        the inference mode is ASYNCHRONOUS. If None, the model will receive all
+        remaining actions not consumed so far from the available action chunk.
     """
-    self._serve_id = serve_id
+
     self._string_observations_keys = [task_instruction_key]
     self._task_instruction_key = task_instruction_key
     self._image_observation_keys = list(image_observation_keys)
@@ -98,8 +94,6 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     self._additional_observations_providers = list(
         additional_observations_providers
     )
-    self._robotics_api_connection = robotics_api_connection
-    self._image_compression_jpeg_quality = image_compression_jpeg_quality
 
     # Go through the additional observation observations spec and
     # augment the image, string and proprioceptive keys.
@@ -116,39 +110,21 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
 
     self._dummy_state = np.zeros(())
 
+    self._model = remote_model_interface.RemoteModelInterface(
+        serve_id=serve_id,
+        robotics_api_connection=robotics_api_connection,
+        string_observations_keys=self._string_observations_keys,
+        task_instruction_key=self._task_instruction_key,
+        proprioceptive_observation_keys=self._proprioceptive_observation_keys,
+        image_observation_keys=self._image_observation_keys,
+        image_compression_jpeg_quality=image_compression_jpeg_quality,
+        num_of_retries=num_retries,
+    )
+
     self._model_output = np.array([])
     self._action_spec: gdmr_types.UnboundedArraySpec | None = None
     self._timestep_spec: gdmr_types.TimeStepSpec | None = None
     self._num_of_actions_per_request = 0
-
-    # Initialize the genai_robotics client
-    self._client = genai_robotics.Client(
-        robotics_api_connection=robotics_api_connection,
-    )
-
-    # TODO: Remove when this is fixed.
-    if (
-        _ENABLE_SERVER_INIT.value
-        and self._robotics_api_connection
-        == constants.RoboticsApiConnectionType.LOCAL
-    ):
-      # Create an additional client connection for the reset method.
-      local_credentials = grpc.local_channel_credentials()
-      self._grpc_channel = grpc.secure_channel(
-          genai_robotics._LOCAL_GRPC_URL.removeprefix('grpc://'),
-          local_credentials,
-      )
-      self._initial_state_stub = self._grpc_channel.unary_unary(
-          method='/gemini_robotics/initial_state',
-          request_serializer=lambda v: v,
-          response_deserializer=lambda v: v,
-      )
-
-      def _query_encoder(query: dict[str, Any]) -> str:
-        encoded_query = json.dumps(query).encode('utf-8')
-        return self._initial_state_stub(encoded_query).decode('utf-8')
-
-      self._initial_state_method = _query_encoder
 
     # Threading setup
     self._inference_mode = inference_mode
@@ -157,6 +133,17 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
       self._future: futures.Future[np.ndarray] | None = None
       self._model_output_lock = threading.Lock()
       self._actions_executed_during_inference = 0
+
+    self._action_conditioning_chunk_length = action_conditioning_chunk_length
+
+  @property
+  def additional_observations_providers(
+      self,
+  ) -> Sequence[
+      additional_observations_provider.AdditionalObservationsProvider
+  ]:
+    """Returns the additional observations providers."""
+    return self._additional_observations_providers
 
   @override
   def initial_state(
@@ -175,14 +162,6 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     self._model_output = np.array([])
     for provider in self._additional_observations_providers:
       provider.reset()
-
-    # TODO: Remove when this is fixed.
-    if (
-        _ENABLE_SERVER_INIT.value
-        and self._robotics_api_connection
-        == constants.RoboticsApiConnectionType.LOCAL
-    ):
-      self._initial_state_method({})
 
     return self._dummy_state
 
@@ -253,34 +232,37 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     else:
       self._timestep_spec = timestep_spec
 
+    assert self._timestep_spec is not None
+    observation_spec = self._timestep_spec.observation
+
     # Validate that the timestep_spec contains the required keys.
     if self._string_observations_keys and not all(
-        string_obs_key in self._timestep_spec.observation
+        string_obs_key in observation_spec
         for string_obs_key in self._string_observations_keys
     ):
       raise ValueError(
           'timestep_spec does not contain all string observation keys.'
           f' Expected: {self._string_observations_keys}, actual:'
-          f' {self._timestep_spec.observation}'
+          f' {observation_spec}'
       )
 
     if self._image_observation_keys and not all(
-        image_obs_key in self._timestep_spec.observation
+        image_obs_key in observation_spec
         for image_obs_key in self._image_observation_keys
     ):
       raise ValueError(
           'timestep_spec does not contain all image observation keys.'
           f' Expected: {self._image_observation_keys}, actual:'
-          f' {self._timestep_spec.observation}'
+          f' {observation_spec}'
       )
     if self._proprioceptive_observation_keys and not all(
-        proprio_obs_key in self._timestep_spec.observation
+        proprio_obs_key in observation_spec
         for proprio_obs_key in self._proprioceptive_observation_keys
     ):
       raise ValueError(
           'timestep_spec does not contain all proprioceptive observation keys.'
           f' Expected: {self._proprioceptive_observation_keys}, actual:'
-          f' {self._timestep_spec.observation}'
+          f' {observation_spec}'
       )
 
     if self._action_spec is None:
@@ -305,8 +287,37 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
       empty_observation[string_obs_key] = np.array('non empty string')
 
     self._actions_buffer = self._query_model(empty_observation, np.array([]))
+
+    # We support only sequence of actions, that is a 2D array with (num_actions,
+    # action_dim) shape.
+    if self._actions_buffer.ndim != 2:
+      raise ValueError(
+          'Action returned by the model must be a 2D array, got'
+          f' {self._actions_buffer.shape}.'
+      )
     # First axis is the number of actions.
     self._num_of_actions_per_request = self._actions_buffer.shape[0]
+    # Assert that the num_of_actions_per_request would be greater than the min
+    # replan interval + action_conditioning_chunk_length. If not, the length of
+    # the conditioning used to query the model in ASYNCHRONOUS mode would end up
+    # being less than desired action_conditioning_chunk_length.
+    if (
+        self._inference_mode == constants.InferenceMode.ASYNCHRONOUS
+        and self._action_conditioning_chunk_length is not None
+    ):
+      required_buffer_size = (
+          self._action_conditioning_chunk_length + self._min_replan_interval
+      )
+      if self._num_of_actions_per_request < required_buffer_size:
+        raise ValueError(
+            'Number of actions per request must be greater than the sum of the'
+            ' action conditioning chunk length and the minimum replan'
+            f' interval. Got {self._num_of_actions_per_request} actions per'
+            f' request, but require more than {required_buffer_size} actions.'
+            ' (Action conditioning chunk length:'
+            f' {self._action_conditioning_chunk_length}, min replan interval:'
+            f' {self._min_replan_interval})'
+        )
 
     self._action_spec = gdmr_types.UnboundedArraySpec(
         shape=self._actions_buffer.shape[1:],
@@ -404,51 +415,23 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
       model_output: np.ndarray,
   ) -> np.ndarray:
     """Queries the model with the given observation and task instruction."""
-    contents = observation_to_model_query_contents.observation_to_model_query_contents(
-        observation=observation,
-        model_output=model_output,
-        string_observations_keys=self._string_observations_keys,
-        task_instruction_key=self._task_instruction_key,
-        proprioceptive_observation_keys=self._proprioceptive_observation_keys,
-        image_observation_keys=self._image_observation_keys,
-        inference_mode=self._inference_mode,
-    )
+    # Conditioning on what the model has left to output in ASYNCHRONOUS mode
+    # and accounting for the action_conditioning_chunk_length if set.
     if (
-        self._robotics_api_connection
-        == constants.RoboticsApiConnectionType.CLOUD_GENAI
+        self._inference_mode == constants.InferenceMode.ASYNCHRONOUS
+        and model_output.size > 0
     ):
-      contents = genai_robotics.update_robotics_content_to_genai_format(
-          contents,
-          image_compression_jpeg_quality=self._image_compression_jpeg_quality,
+      # Trim the model output to the action conditioning chunk length if set.
+      # If None, the model will still receive all remaining actions not consumed
+      # so far from the available action chunk.
+      # NOTE: It is safe to use and reassign the model_output variable here
+      # because its value is a deep copy of the original dictionary which
+      # means that we don't need the lock and does not affect the current
+      # model_output variable used in the step method.
+      model_output = model_output[
+          : self._action_conditioning_chunk_length
+      ]
+      observation[constants.CONDITIONING_ENCODED_OBS_KEY] = (
+          model_output.tolist()
       )
-
-    response = self._client.models.generate_content(
-        model=self._serve_id,
-        contents=contents,
-    )
-
-    # Parse the response text (assuming its JSON containing the action)
-    if response.text:
-      response_data = json.loads(response.text)
-    elif response.candidates:
-      response_data = json.loads(
-          response.candidates[0].content.parts[0].inline_data.data
-      )
-    else:
-      raise ValueError('Response does not contain text or candidates.')
-
-    # Assuming the structure is {'action_chunk': [...]}
-    action_chunk = response_data.get('action_chunk')
-    if action_chunk is None:
-      raise ValueError("Response JSON does not contain 'action_chunk'")
-    action_chunk = np.array(action_chunk)
-    if action_chunk.ndim == 3:
-      action_chunk = action_chunk[0]
-
-    return action_chunk
-
-  @property
-  def policy_type(self) -> str:
-    if self._inference_mode == constants.InferenceMode.ASYNCHRONOUS:
-      return f'gemini_robotics_async[{self._serve_id}]'
-    return f'gemini_robotics[{self._serve_id}]'
+    return self._model.query_model(observation)

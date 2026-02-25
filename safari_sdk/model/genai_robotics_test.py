@@ -79,12 +79,17 @@ class GenaiRoboticsTest(absltest.TestCase):
           "joints_pos": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
       }
 
+      config = types.GenerateContentConfig(
+          http_options=types.HttpOptions(timeout=1500)
+      )
+
       response = client.models.generate_content(
           model="test_model",
           contents=[
               types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"),
               json.dumps(obs),
           ],
+          config=config,
       )
       self.assertEqual(response.text, json.dumps(expected_output))
       mock_cm_custom.assert_called_once()
@@ -92,6 +97,8 @@ class GenaiRoboticsTest(absltest.TestCase):
       self.assertEqual(call_body["modelId"], "test_model")
       self.assertEqual(call_body["methodName"], "sample_actions_json_flat")
       self.assertIsInstance(call_body["requestId"], int)
+      self.assertEqual(call_body["modelOptions"]["timeout"]["seconds"], 1)
+      self.assertEqual(call_body["modelOptions"]["timeout"]["nanos"], 500000000)
       query = json.loads(
           base64.b64decode(call_body["inputBytes"]).decode("utf-8")
       )

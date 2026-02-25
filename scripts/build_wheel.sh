@@ -19,46 +19,59 @@ SAFARI_DIR="$(realpath "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/..")"
 VENV_DIR="$(mktemp -d)"
 UPLOAD_TARGET=""
 UPLOAD_WHL=false
-RUN_SMOKE_TEST=true
+DOCKER_IMAGE=""
 
 function _usage() {
   echo "Usage: $0 [-h|--help] [--no-smoke-test] [--upload]"
   echo "  -h|--help: Show this help message and exit."
-  echo "  --no-smoke-test: Skip the smoke test."
   echo "  --repository-url: Upload the wheel to this repository URL."
+  echo "  --docker-image: Use this docker image for building the wheel."
+  echo "                  If not specified, a new image will be built from the"
+  echo "                  Dockerfile in this directory."
   echo "  --upload: Upload the wheel to PyPi."
 }
+
+function cleanup() {
+  echo "Cleaning up..."
+  rm -rf "${SAFARI_DIR}"/dist/*
+  rm -rf "${SAFARI_DIR}"/wheelhouse/*
+  rm -rf "${VENV_DIR}"
+  if command -v deactivate &> /dev/null; then
+    deactivate
+  fi
+}
+
+trap cleanup EXIT
 
 while (( $# > 0 )) ; do
   case "$1" in
     -h|--help) _usage; exit 1 ;;
     --upload) UPLOAD_WHL=true ; shift ;;
+    --docker-image) DOCKER_IMAGE=$2; shift 2 ;;
     --repository-url) UPLOAD_TARGET="--repository-url $2"; UPLOAD_WHL=true; shift 2 ;;
-    --no-smoke-test) RUN_SMOKE_TEST=false; shift ;;
     *) echo "Unknown option: $1"; _usage; exit 1 ;;
   esac
 done
+cd ${SAFARI_DIR}
+# Generate the revision info file. This is a no-op if not built from a git repository.
+${SAFARI_DIR}/scripts/generate_revision_info.sh "${SAFARI_DIR}/safari_sdk/revision_info.txt" || true
+if [[ -z "${DOCKER_IMAGE}" ]]; then
+  echo "No docker image provided"
+  echo "${DOCKER_IMAGE}"
+  DOCKER_IMAGE="safari-sdk-wheel-build:latest"
+  docker build -t "${DOCKER_IMAGE}" \
+   -f  kokoro/gcp_ubuntu_docker/Dockerfile .
+fi
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -v "${SAFARI_DIR}":/safari \
+   "${DOCKER_IMAGE}" /safari/scripts/kokoro_build_wheel.sh
 
-echo "Building wheel in ${SAFARI_DIR} with venv: ${VENV_DIR}"
+echo "Wheel files should be in the wheelhouse folder."
+ls -l "${SAFARI_DIR}/wheelhouse"
+
 python3 -m venv "${VENV_DIR}"
 source "${VENV_DIR}/bin/activate"
-pip install build
-python3 -m build ${SAFARI_DIR}
-echo Pip wheel is in ${SAFARI_DIR}/dist/*.whl
-
-# Smoke test generated package if desired.
-if ${RUN_SMOKE_TEST}; then
-  echo "Start smoke test"
-  pip install ${SAFARI_DIR}/dist/*.whl
-
-  flywheel-cli help
-  python3 -c "from safari_sdk.logging.python import stream_logger"
-  python3 -c "from safari_sdk.ui import client"
-  python3 -c "from safari_sdk.logging.python import episodic_logger"
-
-  echo "Smoke test done."
-fi
-
 # Upload the wheel to gcloud or PyPI if desired.
 if [[ ${UPLOAD_TARGET} == *python.pkg.dev* ]]; then
   # Install the keyrings to allow authentication with Artifact Registry.
@@ -72,5 +85,7 @@ fi
 
 if ${UPLOAD_WHL}; then
   pip install twine
-  twine upload --verbose ${SAFARI_DIR}/dist/*.whl ${UPLOAD_TARGET}
+  twine upload --verbose ${SAFARI_DIR}/wheelhouse/*.whl ${UPLOAD_TARGET}
 fi
+
+deactivate

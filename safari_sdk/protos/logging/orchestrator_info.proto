@@ -1,0 +1,29 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto2";
+
+package safari_sdk.protos.logging;
+
+message OrchestratorInfo {
+  optional string robot_job_id = 1;
+  optional string work_unit_id = 2;
+  optional string scene_preset_id = 3;
+  optional string task_id = 4;
+  optional string policy_spec_id = 5;
+  optional string agent_session_id = 6;
+  optional string policy_name = 7;
+  optional string task_instruction = 8;
+}
+// Metadata for the Orca

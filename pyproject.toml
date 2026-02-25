@@ -2,16 +2,15 @@
 name = "safari_sdk"
 description = "Safari SDK: the SDK for Google DeepMind Gemini Robotics models"
 readme = "README.md"
-requires-python = ">=3.10,<3.14"  # TODO
+requires-python = ">=3.11,<3.14"
 license = {file = "LICENSE"}
 authors = [{name = "Safari SDKAuthors", email="safari-sdk-authors@google.com"}]
 classifiers = [  # List of https://pypi.org/classifiers/
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
-    "Programming Language :: Python :: 3.10",  # EOL 2026-10
     "Programming Language :: Python :: 3.11",  # EOL 2027-10
     "Programming Language :: Python :: 3.12",  # EOL 2028-10
-    # "Programming Language :: Python :: 3.13", # EOL 2029-19, no compatible tensorflow version as of TF 2.18
+    "Programming Language :: Python :: 3.13",  # EOL 2029-10
     "License :: Other/Proprietary License",
     "Intended Audience :: Science/Research",
 ]
@@ -26,16 +25,18 @@ dependencies = [
   "absl-py",
   "dataclasses_json",
   "dm-env",
-  "evdev",
+  "evdev; sys_platform != 'win32'",
   "fastapi",
   "gdm-robotics",
   "google-api-python-client",
   "google-auth-httplib2",
   "google-auth-oauthlib",
+  # TODO: b/469832494 - Remove once we determine a better dependency resolution.
   "google-genai<=1.55.0",
   "grpcio",
   "imageio",
   "immutabledict",
+  "jax",
   "lark~=1.2",
   "mcap-protobuf-support",
   "mediapy",
@@ -53,7 +54,7 @@ dependencies = [
   # go/keep-sorted end
   # copybara:strip_begin(for internal changes only)
   # LINT.ThenChange(//depot/google3/third_party/safari/sdk/requirements.txt)
-  # Run `bash third_party/safari/sdk/scripts/check_dependency_version_requirements.sh`
+  # Run `bash third_party/safari/sdk/scripts/update_pip_dependencies.sh`
   # to update the dependencies in requirements.txt.
   # copybara:strip_end
 ]
@@ -66,13 +67,10 @@ dynamic = ["version"]
 provider = "scikit_build_core.metadata.regex"
 input = "safari_sdk/__init__.py"
 
-[tool.scikit-build.wheel]
-# By default, scikit-build assumes the package contains platform-specific files
-# and names the .whl file accordingly (eg "*-cp313-cp313-linux_x86_64.whl").
-# However, this package does not contain any platform-specific files, so set
-# platlib to false so the output whl ends with "-py3-none-any.whl". If this ever
-# changes (e.g. if we add pybind11 extensions), this flag should be removed.
-platlib = false
+[tool.scikit-build.sdist]
+# scikit_build_core uses .gitignore to exclude files from the package, so add
+# any files which are excluded from git but *included* in the pip package here.
+include = ["safari_sdk/revision_info.txt", "safari_sdk/**/*_pb2.py"]
 
 [project.scripts]
 flywheel-cli = "safari_sdk.flywheel.flywheel_cli:cli_main"  # 'flywheel-cli' will be installed as a command
@@ -103,10 +101,11 @@ dev = [
 pyink-indentation = 2
 pyink-use-majority-quotes = true
 
-# The scikit backend invokes cmake to build the proto messages.
+# The scikit backend invokes CMake to build the Python bindings and generate
+# the Protobuf files.
 # This is done in a unique temporary build directory unless otherwise specified.
 [build-system]
-requires = ["scikit-build-core>=0.10","setuptools"]
+requires = ["scikit-build-core>=0.10","pybind11"]
 build-backend = "scikit_build_core.build"
 
 [tool.pytest.ini_options]

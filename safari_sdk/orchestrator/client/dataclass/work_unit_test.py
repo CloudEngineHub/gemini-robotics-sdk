@@ -341,6 +341,51 @@ class WorkUnitResponseTest(absltest.TestCase):
     self.assertEqual(success_score.score, 0.0)
     self.assertEqual(success_score.definition, "")
 
+  def test_question_post_init_in_complete_format(self):
+    question = work_unit.Question(
+        question="Is this a proper test question?",
+        whenToAsk=[
+            "QUESTION_CONDITION_ONLY_FAILED_EPISODE",
+            "QUESTION_CONDITION_ESTOP_NOT_PRESSED",
+        ],
+        answerFormat="ANSWER_TYPE_YES_NO",
+        allowedAnswers=["Yes", "No"],
+        questionnaireId="test_questionnaire_id",
+    )
+    self.assertEqual(question.question, "Is this a proper test question?")
+    self.assertLen(question.whenToAsk, 2)
+    self.assertIsInstance(question.whenToAsk[0], work_unit.QuestionCondition)
+    self.assertIsInstance(question.whenToAsk[1], work_unit.QuestionCondition)
+    self.assertSequenceEqual(
+        question.whenToAsk,
+        [
+            work_unit.QuestionCondition.QUESTION_CONDITION_ONLY_FAILED_EPISODE,
+            work_unit.QuestionCondition.QUESTION_CONDITION_ESTOP_NOT_PRESSED,
+        ],
+    )
+    self.assertIsInstance(question.answerFormat, work_unit.AnswerType)
+    self.assertEqual(
+        question.answerFormat,
+        work_unit.AnswerType.ANSWER_TYPE_YES_NO,
+    )
+    self.assertLen(question.allowedAnswers, 2)
+    self.assertSequenceEqual(question.allowedAnswers, ["Yes", "No"])
+    self.assertEmpty(question.userAnswers)
+    self.assertFalse(question.wasDisplayed)
+    self.assertEqual(question.questionnaireId, "test_questionnaire_id")
+
+  def test_question_post_init_as_empty(self):
+    question = work_unit.Question()
+    self.assertEqual(question.question, "")
+    self.assertEmpty(question.whenToAsk)
+    self.assertEqual(
+        question.answerFormat, work_unit.AnswerType.ANSWER_TYPE_UNSPECIFIED
+    )
+    self.assertEmpty(question.allowedAnswers)
+    self.assertEmpty(question.userAnswers)
+    self.assertFalse(question.wasDisplayed)
+    self.assertEqual(question.questionnaireId, "")
+
   def test_response_post_init_from_json_response(self):
     response = work_unit.WorkUnit(
         projectId="test_project_id",

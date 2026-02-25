@@ -38,6 +38,9 @@ _ERROR_NO_SCENE_OBJECTS_FOR_REFERENCE_IMAGE = (
 )
 _ERROR_UNDEFINED_OBJECT_TYPE = "OrchestratorRenderer: Undefined object type:"
 
+_DEFAULT_FONT_SCALE = 0.75
+_DEFAULT_THICKNESS = 2
+
 
 class ImageFormat(enum.Enum):
   JPEG = "JPEG"
@@ -187,6 +190,148 @@ class OrchestratorRenderer:
         int(color_string[4:6], 16),
     )
 
+  def _generate_xy_position_with_no_overruns(
+      self,
+      x: int,
+      y: int,
+      x_offset: int,
+      y_offset: int,
+      image_width: int,
+      image_height: int,
+      text_width: int,
+      text_height: int,
+      text_baseline: int,
+  ) -> tuple[int, int]:
+    """Generates text x and y position with no overruns."""
+
+    ideal_x = x + x_offset
+    ideal_y = y + y_offset
+    is_overrun_x = ideal_x + text_width > image_width
+    is_overrun_y_top = ideal_y - text_height <= 5
+    is_overrun_y_bottom = ideal_y > image_height
+
+    if is_overrun_x:
+      ideal_x = image_width - text_width - 5
+
+    if is_overrun_y_top and not is_overrun_y_bottom:
+      ideal_y = 5 + text_height
+    elif is_overrun_y_bottom and not is_overrun_y_top:
+      ideal_y = image_height - text_baseline - 5
+
+    return ideal_x, ideal_y
+
+  def _find_ideal_text_position(
+      self,
+      text: str,
+      font_scale: float,
+      thickness: int,
+      icon_object: (
+          visual_overlay_icon.DrawCircleIcon
+          | visual_overlay_icon.DrawArrowIcon
+          | visual_overlay_icon.DrawSquareIcon
+          | visual_overlay_icon.DrawTriangleIcon
+          | visual_overlay_icon.DrawContainer
+      ),
+      radius: int | None = None,
+  ) -> tuple[int, int]:
+    """Finds the ideal position for the text to be drawn."""
+    # Find the size of text box.
+    (text_width, text_height), text_baseline = cv2.getTextSize(
+        text=text,
+        fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+        fontScale=font_scale,
+        thickness=thickness,
+    )
+    image_width, image_height = self._overlay_image.size
+    obj_type = type(icon_object)
+
+    match obj_type:
+      case visual_overlay_icon.DrawCircleIcon:
+        return self._generate_xy_position_with_no_overruns(
+            x=icon_object.x,
+            y=icon_object.y,
+            x_offset=10,
+            y_offset=5,
+            image_width=image_width,
+            image_height=image_height,
+            text_width=text_width,
+            text_height=text_height,
+            text_baseline=text_baseline,
+        )
+      case visual_overlay_icon.DrawArrowIcon:
+        return self._generate_xy_position_with_no_overruns(
+            x=icon_object.x,
+            y=icon_object.y,
+            x_offset=10,
+            y_offset=10,
+            image_width=image_width,
+            image_height=image_height,
+            text_width=text_width,
+            text_height=text_height,
+            text_baseline=text_baseline,
+        )
+      case visual_overlay_icon.DrawSquareIcon:
+        return self._generate_xy_position_with_no_overruns(
+            x=icon_object.x,
+            y=icon_object.y,
+            x_offset=10,
+            y_offset=5,
+            image_width=image_width,
+            image_height=image_height,
+            text_width=text_width,
+            text_height=text_height,
+            text_baseline=text_baseline,
+        )
+      case visual_overlay_icon.DrawTriangleIcon:
+        return self._generate_xy_position_with_no_overruns(
+            x=icon_object.x,
+            y=icon_object.y,
+            x_offset=10,
+            y_offset=5,
+            image_width=image_width,
+            image_height=image_height,
+            text_width=text_width,
+            text_height=text_height,
+            text_baseline=text_baseline,
+        )
+      case visual_overlay_icon.DrawContainer:
+        # Rectanglular bounding box.
+        if radius is None:
+          assert isinstance(icon_object, visual_overlay_icon.DrawContainer)
+          assert icon_object.w is not None and icon_object.h is not None
+          upper_left_x = icon_object.x
+          upper_left_y = icon_object.y
+          if icon_object.w < 0:
+            upper_left_x += icon_object.w
+          if icon_object.h < 0:
+            upper_left_y += icon_object.h
+          return self._generate_xy_position_with_no_overruns(
+              x=upper_left_x,
+              y=upper_left_y,
+              x_offset=0,
+              y_offset=-8,
+              image_width=image_width,
+              image_height=image_height,
+              text_width=text_width,
+              text_height=text_height,
+              text_baseline=text_baseline,
+          )
+        else:
+          # Circular bounding box.
+          return self._generate_xy_position_with_no_overruns(
+              x=icon_object.x,
+              y=icon_object.y,
+              x_offset=0,
+              y_offset=radius + 10,
+              image_width=image_width,
+              image_height=image_height,
+              text_width=text_width,
+              text_height=text_height,
+              text_baseline=text_baseline,
+          )
+      case _:
+        return icon_object.x, icon_object.y
+
   def render_overlay(
       self, new_image: AcceptedImageTypes | None = None
   ) -> _RESPONSE:
@@ -195,99 +340,146 @@ class OrchestratorRenderer:
       self._update_image(image=new_image)
 
     for obj in self._overlay_objects:
-      if isinstance(obj, visual_overlay_icon.DrawCircleIcon):
-        self._draw_overlay_circle(
-            x=obj.x,
-            y=obj.y,
-            radius=4,
-            color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-            thickness=self._custom_thickness or -1,
-        )
-        self._write_text(
-            x=obj.x + 10,
-            y=obj.y + 5,
-            display_text=obj.overlay_text_label,
-            color=(255, 255, 255),
-            font_scale=self._custom_font_size or 0.5,
-        )
-      elif isinstance(obj, visual_overlay_icon.DrawArrowIcon):
-        self._draw_overlay_arrow(
-            x=obj.x,
-            y=obj.y,
-            angle=obj.rad if obj.rad else 0.0,
-            color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-            thickness=self._custom_thickness or 4,
-        )
-        # Need to dynamically set XY position based on angle...
-        self._write_text(
-            x=obj.x + 10,
-            y=obj.y + 10,
-            display_text=obj.overlay_text_label,
-            color=(255, 255, 255),
-            font_scale=self._custom_font_size or 0.5,
-        )
-      elif isinstance(obj, visual_overlay_icon.DrawSquareIcon):
-        self._draw_overlay_square(
-            x=obj.x,
-            y=obj.y,
-            color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-            thickness=self._custom_thickness or 2,
-        )
-        self._write_text(
-            x=obj.x + 10,
-            y=obj.y + 5,
-            display_text=obj.overlay_text_label,
-            color=(255, 255, 255),
-            font_scale=self._custom_font_size or 0.5,
-        )
-      elif isinstance(obj, visual_overlay_icon.DrawTriangleIcon):
-        self._draw_overlay_triangle(
-            x=obj.x,
-            y=obj.y,
-            color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-            thickness=self._custom_thickness or 2,
-        )
-        self._write_text(
-            x=obj.x + 10,
-            y=obj.y + 5,
-            display_text=obj.overlay_text_label,
-            color=(255, 255, 255),
-            font_scale=self._custom_font_size or 0.5,
-        )
-      elif isinstance(obj, visual_overlay_icon.DrawContainer):
-        if obj.w is not None and obj.h is not None:
-          self._draw_overlay_box(
-              x=obj.x,
-              y=obj.y,
-              w=obj.w,
-              h=obj.h,
-              color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-              thickness=self._custom_thickness or 1,
-          )
-          self._write_text(
-              x=obj.x,
-              y=obj.y - 8,
-              display_text=obj.overlay_text_label,
-              color=(255, 255, 255),
-              font_scale=self._custom_font_size or 0.5,
-          )
-        elif obj.radius is not None:
+      obj_type = type(obj)
+      match obj_type:
+        case visual_overlay_icon.DrawCircleIcon:
           self._draw_overlay_circle(
               x=obj.x,
               y=obj.y,
-              radius=obj.radius,
+              radius=4,
               color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
-              thickness=self._custom_thickness or 1,
+              thickness=self._custom_thickness or -1,
+          )
+          text_x, text_y = self._find_ideal_text_position(
+              text=obj.overlay_text_label,
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+              icon_object=obj,
           )
           self._write_text(
-              x=obj.x,
-              y=obj.y + obj.radius + 10,
+              x=text_x,
+              y=text_y,
               display_text=obj.overlay_text_label,
               color=(255, 255, 255),
-              font_scale=self._custom_font_size or 0.5,
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
           )
-      else:
-        _RESPONSE(error_message=f"{_ERROR_UNDEFINED_OBJECT_TYPE} {type(obj)}")
+        case visual_overlay_icon.DrawArrowIcon:
+          assert isinstance(obj, visual_overlay_icon.DrawArrowIcon)
+          self._draw_overlay_arrow(
+              x=obj.x,
+              y=obj.y,
+              angle=obj.rad if obj.rad else 0.0,
+              color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
+              thickness=self._custom_thickness or 4,
+          )
+          text_x, text_y = self._find_ideal_text_position(
+              text=obj.overlay_text_label,
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+              icon_object=obj,
+          )
+          # Need to dynamically set XY position based on angle...
+          self._write_text(
+              x=text_x,
+              y=text_y,
+              display_text=obj.overlay_text_label,
+              color=(255, 255, 255),
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+          )
+        case visual_overlay_icon.DrawSquareIcon:
+          self._draw_overlay_square(
+              x=obj.x,
+              y=obj.y,
+              color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+          )
+          text_x, text_y = self._find_ideal_text_position(
+              text=obj.overlay_text_label,
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+              icon_object=obj,
+          )
+          self._write_text(
+              x=text_x,
+              y=text_y,
+              display_text=obj.overlay_text_label,
+              color=(255, 255, 255),
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+          )
+        case visual_overlay_icon.DrawTriangleIcon:
+          self._draw_overlay_triangle(
+              x=obj.x,
+              y=obj.y,
+              color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+          )
+          text_x, text_y = self._find_ideal_text_position(
+              text=obj.overlay_text_label,
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+              icon_object=obj,
+          )
+          self._write_text(
+              x=text_x,
+              y=text_y,
+              display_text=obj.overlay_text_label,
+              color=(255, 255, 255),
+              font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+              thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+          )
+        case visual_overlay_icon.DrawContainer:
+          assert isinstance(obj, visual_overlay_icon.DrawContainer)
+          if obj.w is not None and obj.h is not None:
+            self._draw_overlay_box(
+                x=obj.x,
+                y=obj.y,
+                w=obj.w,
+                h=obj.h,
+                color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+            )
+            text_x, text_y = self._find_ideal_text_position(
+                text=obj.overlay_text_label,
+                font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+                icon_object=obj,
+            )
+            self._write_text(
+                x=text_x,
+                y=text_y,
+                display_text=obj.overlay_text_label,
+                color=(255, 255, 255),
+                font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+            )
+          elif obj.radius is not None:
+            self._draw_overlay_circle(
+                x=obj.x,
+                y=obj.y,
+                radius=obj.radius,
+                color=self._convert_color_to_tuple(obj.rgb_hex_color_value),
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+            )
+            text_x, text_y = self._find_ideal_text_position(
+                text=obj.overlay_text_label,
+                font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+                icon_object=obj,
+                radius=obj.radius,
+            )
+            self._write_text(
+                x=text_x,
+                y=text_y,
+                display_text=obj.overlay_text_label,
+                color=(255, 255, 255),
+                font_scale=self._custom_font_size or _DEFAULT_FONT_SCALE,
+                thickness=self._custom_thickness or _DEFAULT_THICKNESS,
+            )
+        case _:
+          _RESPONSE(error_message=f"{_ERROR_UNDEFINED_OBJECT_TYPE} {obj_type}")
     return _RESPONSE(success=True)
 
   def _update_image(self, image: AcceptedImageTypes) -> None:
@@ -371,7 +563,7 @@ class OrchestratorRenderer:
       w: int,
       h: int,
       color: tuple[int, int, int] = (255, 0, 0),
-      thickness: int = 1,
+      thickness: int = _DEFAULT_THICKNESS,
   ) -> None:
     """Draw box."""
     self._overlay_image_np = cv2.rectangle(
@@ -388,7 +580,7 @@ class OrchestratorRenderer:
       x: int,
       y: int,
       color: tuple[int, int, int] = (255, 0, 0),
-      thickness: int = 2,
+      thickness: int = _DEFAULT_THICKNESS,
   ) -> None:
     """Draw triangle."""
     self._draw_icon(
@@ -404,7 +596,7 @@ class OrchestratorRenderer:
       x: int,
       y: int,
       color: tuple[int, int, int] = (255, 0, 0),
-      thickness: int = 2,
+      thickness: int = _DEFAULT_THICKNESS,
   ) -> None:
     """Draw square."""
     self._draw_icon(
@@ -421,7 +613,7 @@ class OrchestratorRenderer:
       y: int,
       icon_type: int,
       color: tuple[int, int, int] = (255, 0, 0),
-      thickness: int = 2,
+      thickness: int = _DEFAULT_THICKNESS,
   ) -> None:
     """Draw requested native CV2 icons."""
     self._overlay_image_np = cv2.drawMarker(
@@ -440,8 +632,8 @@ class OrchestratorRenderer:
       y: int,  # Lower left of text box.
       display_text: str,
       color: tuple[int, int, int] = (255, 0, 0),
-      font_scale: float = 0.5,
-      thickness: int = 1,
+      font_scale: float = _DEFAULT_FONT_SCALE,
+      thickness: int = _DEFAULT_THICKNESS,
   ) -> None:
     """Draw text into image via CV2."""
     self._overlay_image_np = cv2.putText(

@@ -171,9 +171,9 @@ class RendererTest(absltest.TestCase):
     self.assertIsNone(renderer._custom_thickness)
     self.assertIsNone(renderer._custom_font_size)
 
-    response = renderer.set_custom_thickness(thickness=2)
+    response = renderer.set_custom_thickness(thickness=4)
     self.assertTrue(response.success)
-    self.assertEqual(renderer._custom_thickness, 2)
+    self.assertEqual(renderer._custom_thickness, 4)
     response = renderer.set_custom_font_size(font_size=0.5)
     self.assertTrue(response.success)
     self.assertEqual(renderer._custom_font_size, 0.5)
@@ -251,6 +251,63 @@ class RendererTest(absltest.TestCase):
         image_with_default_overlay, image_with_custom_overlay
     )
     self.assertFalse(is_same_image)
+
+  def test_generate_xy_position_with_no_overruns(self):
+    renderer = visual_overlay.OrchestratorRenderer(
+        scene_reference_image_data=_reference_image_metadata_1
+    )
+    image_width, image_height = renderer._overlay_image.size
+    ideal_x, ideal_y = renderer._generate_xy_position_with_no_overruns(
+        x=100,
+        y=100,
+        x_offset=10,
+        y_offset=10,
+        image_width=image_width,
+        image_height=image_height,
+        text_width=10,
+        text_height=10,
+        text_baseline=5,
+    )
+    self.assertEqual(ideal_x, 110)
+    self.assertEqual(ideal_y, 110)
+
+    ideal_x, ideal_y = renderer._generate_xy_position_with_no_overruns(
+        x=1000,
+        y=1000,
+        x_offset=0,
+        y_offset=0,
+        image_width=image_width,
+        image_height=image_height,
+        text_width=10,
+        text_height=10,
+        text_baseline=5,
+    )
+    self.assertEqual(ideal_x, 185)
+    self.assertEqual(ideal_y, 190)
+
+  def test_find_ideal_text_position(self):
+    renderer = visual_overlay.OrchestratorRenderer(
+        scene_reference_image_data=_reference_image_metadata_1
+    )
+    text = 'test_label'
+    font_scale = 0.75
+    thickness = 2
+    icon_object = visual_overlay.visual_overlay_icon.DrawCircleIcon(
+        object_id='test_object_id_1',
+        overlay_text_label='test_label_1',
+        rgb_hex_color_value='FF0000',
+        layer_order=1,
+        x=50,
+        y=50,
+    )
+    ideal_x, ideal_y = renderer._find_ideal_text_position(
+        text=text,
+        font_scale=font_scale,
+        thickness=thickness,
+        icon_object=icon_object,
+    )
+    self.assertEqual(ideal_x, 60)
+    self.assertEqual(ideal_y, 55)
 
   def test_get_image_as_pil_image(self):
     renderer = visual_overlay.OrchestratorRenderer(

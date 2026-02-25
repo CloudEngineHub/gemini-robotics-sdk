@@ -1,17 +1,35 @@
+# Copyright 2026 Google LLC
+#
+#  Licensed under the Apache License, Version 2.0 (the "License");
+#  you may not use this file except in compliance with the License.
+#  You may obtain a copy of the License at
+#
+#      https://www.apache.org/licenses/LICENSE-2.0
+#
+#  Unless required by applicable law or agreed to in writing, software
+#  distributed under the License is distributed on an "AS IS" BASIS,
+#  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#  See the License for the specific language governing permissions and
+#  limitations under the License.
+
 """The Fast API server for the external controller of EAR framework."""
 
 import asyncio
+import base64
 import enum
 import json
 import logging
+from typing import Any
 
 import fastapi
+from fastapi.middleware import cors
+import fastapi.staticfiles
+import psutil
 import uvicorn
 
-from safari_sdk.agent.framework import types
+from safari_sdk.agent.framework import flags as agentic_flags
 from safari_sdk.agent.framework.event_bus import event_bus
-from safari_sdk.agent.framework.live_api import live_handler
-from safari_sdk.agent.framework.tools import genai_client
+from safari_sdk.agent.framework.ui import terminal_ui
 
 
 @enum.unique
@@ -33,6 +51,41 @@ class EARFrameworkStatus(enum.Enum):
   # run() has been called and the agent thinks it finished the long-horizon
   # task.
   FINISHED = "FINISHED"
+
+
+def _postprocess_event(
+    event_type: event_bus.EventType,
+    source: event_bus.EventSource,
+    data: Any,
+    metadata: dict[str, Any] | None,
+) -> event_bus.Event:
+  """Creates an Event from the given inputs.
+
+  For MODEL_TEXT_INPUT events with data, parses user input using terminal_ui
+  to handle special prefixes (@d, @s, @f). For all other events, creates a
+  standard Event directly.
+
+  Args:
+    event_type: The type of event to create.
+    source: The source of the event.
+    data: The event data.
+    metadata: Additional metadata for the event.
+
+  Returns:
+    An Event object ready to be published.
+  """
+  match event_type:
+    case event_bus.EventType.MODEL_TEXT_INPUT if data:
+      return terminal_ui.parse_user_input_to_event(
+          message=str(data), source=source, default_metadata=metadata
+      )
+    case _:
+      return event_bus.Event(
+          type=event_type,
+          source=source,
+          data=data,
+          metadata=metadata,
+      )
 
 
 class ExternalControllerFastAPIServer:
@@ -61,13 +114,94 @@ class ExternalControllerFastAPIServer:
     self._external_controller_server = fastapi.FastAPI()
     self._server_task = None
     self.framework_status = EARFrameworkStatus.NOT_READY
-    self.live_api_health = live_handler.LiveAPIHealth.NORMAL
-    self.live_api_health_msg = ""
-    self.sd_tool_health = genai_client.GeminiClientHealth.NORMAL
-    self.sd_tool_health_msg = ""
+    self.component_health_dict = {}
+
+    # Enable CORS so the web GUI (on a different port) can make requests.
+    self._external_controller_server.add_middleware(
+        cors.CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Defines the FastAPI endpoints.
     self._setup_endpoints()
+
+  _PROCESS_TERMINATE_TIMEOUT_SECS = 5
+
+  def _kill_process_on_port(self) -> bool:
+    """Kills any process using the configured port.
+
+    First attempts graceful termination (SIGTERM), waits up to
+    _PROCESS_TERMINATE_TIMEOUT_SECS, then forces kill (SIGKILL) if the
+    process is still running.
+    Uses psutil for cross-platform compatibility (Linux, macOS, Windows).
+
+    Note: There is a TOCTOU race between killing the old process and binding
+    the new server. Another process could theoretically bind to the port in
+    that window. In practice this is unlikely for the controller port.
+
+    Returns:
+      True if a process was killed, False otherwise.
+    """
+    killed_any = False
+    try:
+      for conn in psutil.net_connections(kind="inet"):
+        if conn.laddr.port == self._port and conn.status == psutil.CONN_LISTEN:
+          try:
+            proc = psutil.Process(conn.pid)
+            proc_name = proc.name()
+            proc.terminate()
+            try:
+              proc.wait(timeout=self._PROCESS_TERMINATE_TIMEOUT_SECS)
+              logging.warning(
+                  "\n"
+                  "╔══════════════════════════════════════════════════════════════╗\n"
+                  "║  🛑 TERMINATED PROCESS ON PORT %s (PID: %s, %s)           "
+                  "  ║\n"
+                  "╚══════════════════════════════════════════════════════════════╝",
+                  self._port,
+                  conn.pid,
+                  proc_name,
+              )
+            except psutil.TimeoutExpired:
+              proc.kill()
+              logging.warning(
+                  "\n"
+                  "╔══════════════════════════════════════════════════════════════╗\n"
+                  "║  🔪 KILLED PROCESS ON PORT %s (PID: %s, %s)               "
+                  "  ║\n"
+                  "║  (Process did not respond to SIGTERM after %s seconds)    "
+                  "  ║\n"
+                  "╚══════════════════════════════════════════════════════════════╝",
+                  self._port,
+                  conn.pid,
+                  proc_name,
+                  self._PROCESS_TERMINATE_TIMEOUT_SECS,
+              )
+            killed_any = True
+          except psutil.NoSuchProcess:
+            pass
+          except psutil.AccessDenied:
+            logging.warning(
+                "Access denied when trying to kill process %s on port %s."
+                " Try running with elevated privileges (e.g. sudo).",
+                conn.pid,
+                self._port,
+            )
+    except psutil.AccessDenied:
+      logging.warning(
+          "Access denied when listing network connections on port %s."
+          " psutil.net_connections() requires elevated privileges on"
+          " some platforms (e.g. sudo on macOS).",
+          self._port,
+      )
+    except Exception as e:  # pylint: disable=broad-exception-caught
+      logging.warning(
+          "Error checking for processes on port %s: %s", self._port, e
+      )
+    return killed_any
 
   def _setup_endpoints(self) -> None:
     """Sets up the external controller FastAPI endpoints."""
@@ -99,6 +233,32 @@ class ExternalControllerFastAPIServer:
       )
       return {"message": f"Instructed EAR framework to execute task: {lh_task}"}
 
+    @self._external_controller_server.get("/execute_interaction/")
+    async def execute_interaction(  # pylint: disable=unused-variable
+        interaction: str,
+    ) -> dict[str, str]:
+      """CANONICAL endpoint: Tell agent to execute an interaction.
+
+      This is done by publishing a MODEL_TEXT_INPUT event to the event bus.
+
+      Example usage (type in the browser's url bar):
+      localhost:8887/execute_interaction/?interaction=Hi Appollo, how are you?
+
+      Args:
+        interaction: The interaction to execute.
+      """
+      logging.info("EXTERNAL CONTROLLER: Execute interaction: %s", interaction)
+      # Directly tell the agent to execute the task by publishing a
+      # MODEL_TEXT_INPUT event to the event bus.
+      await self._bus.publish(
+          event=event_bus.Event(
+              type=event_bus.EventType.MODEL_TEXT_INPUT,
+              source=event_bus.EventSource.EXTERNAL_CONTROLLER,
+              data=interaction,
+          )
+      )
+      return {"message": f"Instructed EAR framework to execute: {interaction}"}
+
     @self._external_controller_server.get("/get_agent_session_id/")
     async def get_agent_session_id() -> dict[str, str]:  # pylint: disable=unused-variable
       """CANONICAL endpoint: Gets the agent session id from the event bus.
@@ -124,12 +284,17 @@ class ExternalControllerFastAPIServer:
       localhost:8887/terminate/
       """
       logging.info("EXTERNAL CONTROLLER: Terminate")
+      episode_info = self._bus.shutdown()
       for task in asyncio.all_tasks():
         if not task.done():
           task.cancel()
           logging.info("Task %s is cancelled.", task.get_name())
 
-      return {"message": "Terminating EAR framework."}
+      message = {"message": "Terminating EAR framework."}
+      if episode_info is not None and episode_info:
+        message.update({k: v for k, v in episode_info.items() if v is not None})
+      logging.info("EXTERNAL CONTROLLER terminate message: %s", message)
+      return message
 
     @self._external_controller_server.get("/stop/")
     async def stop() -> dict[str, str]:  # pylint: disable=unused-variable
@@ -183,7 +348,7 @@ class ExternalControllerFastAPIServer:
       }
 
     @self._external_controller_server.get("/get_framework_status/")
-    async def get_framework_status() -> dict[str, str]:  # pylint: disable=unused-variable
+    async def get_framework_status() -> dict[str, Any]:  # pylint: disable=unused-variable
       """CANONICAL endpoint: Gets the framework and component status.
 
       This endpoint is used to get the framework status without streaming.
@@ -192,11 +357,8 @@ class ExternalControllerFastAPIServer:
       """
       logging.info("EXTERNAL CONTROLLER: Get framework status.")
       return {
-          "framework_status": f"{self.framework_status.value}",
-          "live_api_health": f"{self.live_api_health.value}",
-          "sd_tool_health": f"{self.sd_tool_health.value}",
-          "live_api_health_msg": f"{self.live_api_health_msg}",
-          "sd_tool_health_msg": f"{self.sd_tool_health_msg}",
+          "framework_status": self.framework_status.value,
+          "component_health_dict": self.component_health_dict,
       }
 
     @self._external_controller_server.get("/stream_framework_status/")
@@ -220,8 +382,7 @@ class ExternalControllerFastAPIServer:
         while True:
           data = {
               "framework_status": self.framework_status.value,
-              "live_api_health": f"{self.live_api_health.value}",
-              "sd_tool_health": f"{self.sd_tool_health.value}",
+              "component_health_dict": self.component_health_dict,
           }
           data = f"data: {json.dumps(data)}\n\n"
           yield data
@@ -242,12 +403,13 @@ class ExternalControllerFastAPIServer:
       This endpoint can be used to get any event types from the event bus.
 
       Example usage (type in the browser's url bar):
-      localhost:8887/stream_events/?event_types=MODEL_TURN&event_types=TOOL_CALL&event_types=TOOL_RESULT&event_types=MODEL_TEXT_INPUT
+      localhost:8887/stream_events/?event_types=MODEL_TURN&event_types=TOOL_CALL&event_types=TOOL_RESULT&event_types=MODEL_TEXT_INPUT&event_types=SUCCESS_SIGNAL&event_types=FRAMEWORK_STATUS&event_types=SYSTEM_MESSAGE
 
       Args:
         event_types: A list of event types to subscribe to. Must be string
           representations of event_bus.EventType enums.
       """
+
       logging.info(
           "EXTERNAL CONTROLLER: Stream events for types: %s", event_types
       )
@@ -280,18 +442,91 @@ class ExternalControllerFastAPIServer:
           subscription_id,
       )
 
+      def _extract_audio_data(event_data: Any) -> dict[str, Any] | None:
+        """Extract audio data from MODEL_TURN event parts.
+
+        Args:
+          event_data: The data of the MODEL_TURN event. This is expected to be a
+            Content object with a .parts attribute.
+
+        Returns:
+          A dict with base64-encoded audio and mime_type if found,
+          or None if no audio data is present.
+        """
+
+        # MODEL_TURN data is a Content object with a .parts attribute
+        parts = None
+        if hasattr(event_data, "parts"):
+          parts = event_data.parts
+        elif hasattr(event_data, "__iter__"):
+          parts = event_data
+
+        if not parts:
+          return None
+
+        try:
+          for part in parts:
+            if hasattr(part, "inline_data") and part.inline_data:
+              inline = part.inline_data
+              if (
+                  hasattr(inline, "mime_type")
+                  and inline.mime_type
+                  and "audio" in inline.mime_type
+                  and hasattr(inline, "data")
+                  and inline.data
+              ):
+                return {
+                    "audio_base64": (
+                        base64.b64encode(inline.data).decode("utf-8")
+                    ),
+                    "mime_type": inline.mime_type,
+                }
+        except (TypeError, AttributeError):
+          pass
+        return None
+
       async def _event_generator():
         try:
           while True:
             event = await queue.get()
+            event_data_value = event.data
+            audio_data = None
+
+            # For MODEL_TURN events, try to extract and base64-encode audio
+            if event.type == event_bus.EventType.MODEL_TURN:
+              audio_data = _extract_audio_data(event_data_value)
+
+            if isinstance(event_data_value, bytes):
+              event_data_value = base64.b64encode(event_data_value).decode(
+                  "utf-8"
+              )
+            elif hasattr(event_data_value, "model_dump"):
+              # Pydantic v2 models (e.g., genai_types.Transcription) need
+              # explicit JSON serialization. Without this, str() produces
+              # Python repr like "text='hello' finished=None" instead of
+              # JSON. mode='json' handles nested bytes and other types.
+              # Note: Pydantic v2 models also have dict() (deprecated
+              # alias), so model_dump is checked first intentionally.
+              event_data_value = event_data_value.model_dump(mode="json")
+            elif hasattr(event_data_value, "dict"):
+              # Fallback for pure Pydantic v1 models (no model_dump).
+              event_data_value = event_data_value.dict()
+            else:
+              event_data_value = str(event_data_value)
+
             event_data = {
-                "type": str(event.type),  # Convert enum to string for json.
-                "data": str(event.data),
+                "type": str(event.type),
+                "data": event_data_value,
                 "metadata": event.metadata,
-                "source": str(event.source),  # Convert enum to string for json.
+                "source": str(event.source),
                 "timestamp": event.timestamp.timestamp(),
             }
-            yield f"data: {json.dumps(event_data)}\n\n"
+
+            # Add extracted audio data as a separate field for easy access
+            if audio_data:
+              event_data["audio"] = audio_data
+
+            yield f"data: {json.dumps(event_data, default=str)}\n\n"
             queue.task_done()
         except asyncio.CancelledError:
           logging.info("Event streaming cancelled for types: %s", event_types)
@@ -328,18 +563,48 @@ class ExternalControllerFastAPIServer:
       return await stream_events(event_types)
 
     @self._external_controller_server.post("/publish_event/")
-    async def publish_event(event: types.Event):  # pylint: disable=unused-variable
+    async def publish_event(event: dict[str, Any]):  # pylint: disable=unused-variable
       """Publishes an event to the agent framework.
 
+      If the event is MODEL_TEXT_INPUT and the message contains special
+      prefixes (@d, @s, @f), it will be converted to the appropriate event
+      type (DEBUG, SUCCESS_SIGNAL with True/False).
+
       Example usage (type in the browser's url bar): curl -X POST -H
-      "Content-Type: application/json" -d '{"type": "DEBUG", "source": "USER",
-      "data": "hello", "metadata": {}}' http://localhost:8887/publish_event/
+      "Content-Type: application/json" -d '{"type": "MODEL_TEXT_INPUT",
+      "source": "USER", "data": "hello", "metadata": {}}'
+      http://localhost:8887/publish_event/
 
       Args:
-        event: The event to publish to the agent framework.
+        event: The event dict to publish to the agent framework.
       """
       logging.info("EXTERNAL CONTROLLER: Publish event: %s", event)
-      await self._bus.publish(event=event)
+
+      event_type_str = event.get("type", "MODEL_TEXT_INPUT")
+      source_str = event.get("source", "USER")
+      data = event.get("data", "")
+      metadata = event.get("metadata", {})
+
+      try:
+        event_type = event_bus.EventType[event_type_str]
+      except KeyError as exc:
+        raise fastapi.HTTPException(
+            status_code=fastapi.status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid event_type: {event_type_str}",
+        ) from exc
+
+      try:
+        source = event_bus.EventSource[source_str]
+      except KeyError:
+        source = event_bus.EventSource.USER
+
+      final_event = _postprocess_event(
+          event_type=event_type,
+          source=source,
+          data=data,
+          metadata=metadata,
+      )
+      await self._bus.publish(event=final_event)
 
     @self._external_controller_server.get("/publish_to_event_bus/")
     async def publish_to_event_bus(  # pylint: disable=unused-variable
@@ -400,39 +665,44 @@ class ExternalControllerFastAPIServer:
     )
     self.framework_status = EARFrameworkStatus(event.data)
 
-  async def _handle_live_api_health_events(
+  async def _handle_orchestrator_health_events(
       self,
       event: event_bus.Event
   ) -> None:
-    """Callback for live api health events."""
+    """Callback for orchestrator health events from any orchestrator type."""
     logging.warning(
-        "Live API health event received. Status transitioning to: %s",
-        event.data,
+        "Health status for orchestrator changed. Status transitioning to: %s",
+        event.data["health_status"],
     )
-    self.live_api_health = live_handler.LiveAPIHealth(
-        event.data["health_status"]
-    )
-    self.live_api_health_msg = event.data["exception_message"]
+    self.component_health_dict["orchestrator"] = {
+        "health_status": event.data["health_status"],
+        "exception_message": event.data["exception_message"],
+    }
 
-  async def _handle_sd_tool_health_events(
+  async def _handle_tool_health_events(
       self,
       event: event_bus.Event
   ) -> None:
-    """Callback for SD tool health events."""
+    """Callback for tool health events."""
     logging.warning(
-        "SD tool health event received. Status transitioning to: %s",
-        event.data,
+        "Health status for tool %s changed. Status transitioning to: %s",
+        event.data["tool_name"],
+        event.data["health_status"],
     )
-    self.sd_tool_health = genai_client.GeminiClientHealth(
-        event.data["health_status"]
-    )
-    self.sd_tool_health_msg = event.data["exception_message"]
+    self.component_health_dict[event.data["tool_name"]] = {
+        "health_status": event.data["health_status"],
+        "exception_message": event.data["exception_message"],
+    }
 
   async def _run_server(self) -> None:
     """Runs the FastAPI server for external control of the EAR framework."""
 
     config = uvicorn.Config(
-        self._external_controller_server, host=self._host, port=self._port
+        self._external_controller_server,
+        host=self._host,
+        port=self._port,
+        # TODO: Add flag, but Copybara is blocking.
+        access_log=False,
     )
 
     # Custom server class to prevent uvicorn from intercepting keyboard
@@ -460,6 +730,11 @@ class ExternalControllerFastAPIServer:
 
   async def connect(self) -> None:
     """Runs the FastAPI server for external control of the EAR framework."""
+    # Note: There is a TOCTOU race between killing the port process and
+    # starting uvicorn below. See _kill_process_on_port docstring.
+    if agentic_flags.AGENTIC_KILL_PORT_PROCESS.value:
+      self._kill_process_on_port()
+
     self._server_task = asyncio.create_task(self._run_server())
 
     # Subscribe to FRAMEWORK_STATUS events to update the framework status.
@@ -467,15 +742,19 @@ class ExternalControllerFastAPIServer:
         event_types=[event_bus.EventType.FRAMEWORK_STATUS],
         handler=self._handle_framework_status_events,
     )
-    # Subscribe to LIVE_API_HEALTH events to update the live API health.
+    # Subscribe to orchestrator health events.
+    # - ORCHESTRATOR_CLIENT_HEALTH: published by NonStreamingGenAIHandler
     self._bus.subscribe(
-        event_types=[event_bus.EventType.LIVE_API_HEALTH],
-        handler=self._handle_live_api_health_events,
+        event_types=[
+            event_bus.EventType.ORCHESTRATOR_CLIENT_HEALTH,
+        ],
+        handler=self._handle_orchestrator_health_events,
     )
-    # Subscribe to GEMINI_CLIENT_HEALTH events to update the SD tool health.
+    # Subscribe to tool_health_TOOL_CLIENT_HEALTH events to update the tools'
+    # health.
     self._bus.subscribe(
-        event_types=[event_bus.EventType.GEMINI_CLIENT_HEALTH],
-        handler=self._handle_sd_tool_health_events,
+        event_types=[event_bus.EventType.TOOL_CLIENT_HEALTH],
+        handler=self._handle_tool_health_events,
     )
     self.framework_status = EARFrameworkStatus.READY
 

@@ -14,16 +14,23 @@
 
 """Utils for managing metadata."""
 
+from collections.abc import Callable, Mapping, Sequence
 import dataclasses
 import sys
-from typing import Mapping, Sequence
+
 from dm_env import specs
 import numpy as np
+
 from safari_sdk.logging.python import constants
 from safari_sdk.protos.logging import codec_pb2
 from safari_sdk.protos.logging import dtype_pb2
 from safari_sdk.protos.logging import feature_specs_pb2
+from safari_sdk.protos.logging import policy_type_pb2
 from safari_sdk.protos.logging import spec_pb2
+
+
+PolicyProviderType = Callable[[], policy_type_pb2.PolicyType]
+PolicyConfigType = policy_type_pb2.PolicyType | PolicyProviderType
 
 
 @dataclasses.dataclass(frozen=True)
@@ -37,8 +44,11 @@ class PolicyEnvironmentMetadataParams:
   observation_spec: Mapping[str, specs.Array]
   reward_spec: specs.Array | Mapping[str, specs.Array]
   discount_spec: specs.Array | Mapping[str, specs.Array]
-  action_spec: specs.BoundedArray
+  action_spec: specs.BoundedArray | Mapping[str, specs.Array]
   policy_extra_spec: Mapping[str, specs.Array]
+  policy_type: PolicyConfigType
+  control_timestep: float
+  embodiment_version: str
 
 
 def create_feature_specs_proto(
@@ -89,10 +99,15 @@ def create_feature_specs_proto(
           create_spec_proto(spec)
       )
 
-  # Process the action spec
-  action_spec[constants.ACTION_KEY_PREFIX] = create_spec_proto(
-      params.action_spec
-  )
+  if isinstance(params.action_spec, specs.BoundedArray):
+    action_spec[constants.ACTION_KEY_PREFIX] = create_spec_proto(
+        params.action_spec
+    )
+  elif isinstance(params.action_spec, Mapping):
+    for key, spec in params.action_spec.items():
+      action_spec[constants.ACTION_KEY_TEMPLATE.format(key)] = (
+          create_spec_proto(spec)
+      )
 
   # Process the policy extra spec
   for key, spec in params.policy_extra_spec.items():
@@ -130,8 +145,15 @@ def create_spec_proto(
     spec_proto.minimum_values.extend(convert_spec_bound(spec.minimum))
     spec_proto.maximum_values.extend(convert_spec_bound(spec.maximum))
 
-  spec_proto.dtype = create_dtype_proto(spec.dtype)
+  # For images, hardcode the dtype to uint8. Compressed images will have a spec
+  # Array with dtype = object. Therefore we need to explicitly set the dtype so
+  # that it matches the dtype for uncompressed images.
+  if codec != codec_pb2.CODEC_NONE:
+    spec_proto.dtype = dtype_pb2.DTYPE_UINT8
+  else:
+    spec_proto.dtype = create_dtype_proto(spec.dtype)
   spec_proto.codec = codec
+
   return spec_proto
 
 

@@ -1,4 +1,4 @@
-# Copyright 2025 Google LLC
+# Copyright 2026 Google LLC
 #
 #  Licensed under the Apache License, Version 2.0 (the "License");
 #  you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@ flag value with "agent.".
 
 import enum
 from absl import flags
+from google.genai import types as genai_types
 from safari_sdk.agent.framework import types
 
 
@@ -33,6 +34,12 @@ class SDToolName(enum.Enum):
   SUBTASK_SUCCESS_DETECTOR_V3 = "SubtaskSuccessDetectorV3"
   SUBTASK_SUCCESS_DETECTOR_V4 = "SubtaskSuccessDetectorV4"
   ENSEMBLE_SUBTASK_SUCCESS_DETECTOR_V2 = "EnsembleSubtaskSuccessDetectorV2"
+  # This success detector queries the robot backend to determine if the success
+  # pedal (i.e. by human operator) has been triggered.
+  PEDAL_TRIGGERED_SUCCESS_DETECTOR = "PedalTriggeredSuccessDetector"
+
+
+SdStitchMode = types.SDStitchMode
 
 AGENTIC_API_KEY = flags.DEFINE_string(
     "general.api_key",
@@ -45,9 +52,7 @@ AGENTIC_BASE_URL = flags.DEFINE_string(
     "https://generativelanguage.googleapis.com",
     "Base URL of the Gemini Live and Gemini API. For example:"
     " - prod: https://generativelanguage.googleapis.com"
-    " - autopush: https://autopush-generativelanguage.sandbox.googleapis.com"
-    " - staging: https://staging-generativelanguage.sandbox.googleapis.com"
-    " - preprod: https://preprod-generativelanguage.googleapis.com",
+    ,
 )
 
 AGENTIC_LOG_LEVEL = flags.DEFINE_enum(
@@ -63,7 +68,7 @@ AGENTIC_LOG_LEVEL = flags.DEFINE_enum(
 # ------------------------
 AGENTIC_CONTROL_MODE = flags.DEFINE_enum_class(
     "framework.control_mode",
-    default=types.ControlMode.TERMINAL_ONLY,
+    default=types.ControlMode.SERVER_AND_TERMINAL,
     enum_class=types.ControlMode,
     help="The control mode for the framework.",
 )
@@ -82,10 +87,47 @@ AGENTIC_EXTERNAL_CONTROLLER_PORT = flags.DEFINE_integer(
     " control_mode is not set to LAUNCH_SERVER.",
 )
 
-AGENTIC_USE_OPERATOR_FRIENDLY_TERMINAL_UI = flags.DEFINE_bool(
-    "framework.use_operator_friendly_terminal_ui",
+AGENTIC_KILL_PORT_PROCESS = flags.DEFINE_bool(
+    "framework.kill_port_process",
+    False,
+    "If True, kill any process using the external controller port before"
+    " starting the server. First attempts graceful SIGTERM, then SIGKILL"
+    " after a timeout. Helps when restarting the framework and a previous"
+    " instance is still holding the port.",
+)
+
+AGENTIC_EXTERNAL_UI_TYPE = flags.DEFINE_enum_class(
+    "framework.external_ui_type",
+    default=types.ExternalUIType.NONE,
+    enum_class=types.ExternalUIType,
+    help=(
+        "The external UI type to use for event printing. For example,"
+        " OPERATOR_DATA_COLLECT prints to robotics UI."
+    ),
+)
+
+AGENTIC_PUBLISH_LOGGING_EVENTS = flags.DEFINE_bool(
+    "framework.publish_logging_events",
     default=False,
-    help="Whether to use the operator friendly terminal UI.",
+    help="Whether to publish Python logging events to the event bus.",
+)
+
+AGENTIC_HANDLE_AUDIO_ON_ROBOT = flags.DEFINE_boolean(
+    "framework.handle_audio_on_robot",
+    False,
+    "Whether to stream audio recording from and playback to the robot server.",
+)
+
+AGENTIC_HANDLE_AUDIO_ON_GUI = flags.DEFINE_boolean(
+    "framework.handle_audio_on_gui",
+    True,
+    "Whether to handle audio on the GUI. This is only applicable when running"
+    "the agent as external server and interacting through the web GUI.",
+)
+AGENTIC_LISTEN_WHILE_SPEAKING = flags.DEFINE_boolean(
+    "framework.listen_while_speaking",
+    False,
+    "Whether to listen while speaking.",
 )
 
 # ------------------------
@@ -131,7 +173,10 @@ AGENTIC_LISTEN_WHILE_SPEAKING = flags.DEFINE_bool(
 AGENTIC_ENABLE_AUDIO_TRANSCRIPTION = flags.DEFINE_bool(
     "agent.enable_audio_transcription",
     False,
-    "Whether to enable audio transcription.",
+    "Whether to display audio transcription in the terminal UI. Note: Audio"
+    " transcription is always enabled in the Live API when audio input/output"
+    " is enabled; this flag only controls whether the transcription is"
+    " displayed in the terminal.",
 )
 
 AGENTIC_OUTPUT_AUDIO_VOICE_NAME = flags.DEFINE_string(
@@ -143,7 +188,7 @@ AGENTIC_OUTPUT_AUDIO_VOICE_NAME = flags.DEFINE_string(
 
 AGENTIC_ONLY_ACTIVITY_COVERAGE = flags.DEFINE_bool(
     "agent.only_activity_coverage",
-    True,
+    False,
     "Whether to only use activity coverage for the Gemini Live agent."
     "In additional to toggling the LiveAPI setting, images are inserted before"
     "each test input and function response.",
@@ -151,13 +196,13 @@ AGENTIC_ONLY_ACTIVITY_COVERAGE = flags.DEFINE_bool(
 
 AGENTIC_UPDATE_VISION_AFTER_FR = flags.DEFINE_bool(
     "agent.update_vision_after_fr",
-    True,
+    False,
     "Whether to update vision after a function response.",
 )
 
 AGENTIC_ENABLE_CONTEXT_WINDOW_COMPRESSION = flags.DEFINE_bool(
     "agent.enable_context_window_compression",
-    False,
+    True,
     "Whether to enable context window compression. Without compression,"
     " audio-only sessions are limited to 15 minutes, and audio-video sessions"
     " are limited to 2 minutes. Exceeding these limits will terminate the"
@@ -242,6 +287,135 @@ AGENTIC_LOG_GEMINI_QUERY = flags.DEFINE_bool(
     "Whether to log the Gemini query for all tools.",
 )
 
+AGENTIC_ENABLE_IMAGE_STITCHING = flags.DEFINE_bool(
+    "agent.enable_image_stitching",
+    False,
+    "Whether to stitch multiple camera images into a single grid image before"
+    " sending to the Gemini Live model. When disabled, images are sent"
+    " individually.",
+)
+
+AGENTIC_SHOW_CAMERA_NAME_IN_STITCHED_IMAGE = flags.DEFINE_bool(
+    "agent.show_camera_name_in_stitched_image",
+    True,
+    "Whether to show camera name labels on stitched images. Only has effect"
+    " when agent.enable_image_stitching is True.",
+)
+
+AGENTIC_ENABLE_AUTOMATIC_SESSION_RESUMPTION = flags.DEFINE_bool(
+    "agent.enable_automatic_session_resumption",
+    True,
+    "Whether to enable automatic session resumption when receiving GO_AWAY"
+    " from the Live API. When enabled, the framework will automatically"
+    " reconnect after a 20 second grace period.",
+)
+
+AGENTIC_NON_STREAMING_IMAGE_PRUNING_TRIGGER_AMOUNT = flags.DEFINE_integer(
+    "agent.non_streaming_image_pruning_trigger_amount",
+    60,
+    "Maximum number of images to keep in conversation history for non-streaming"
+    " API. When this limit is exceeded, images are pruned down to"
+    " agent.non_streaming_image_pruning_target_amount.",
+)
+
+AGENTIC_NON_STREAMING_IMAGE_BUFFERING_INTERVAL_SECONDS = flags.DEFINE_float(
+    "agent.non_streaming_image_buffering_interval_seconds",
+    1.0,
+    "The interval in seconds for buffering images in the non-streaming handler."
+    " Images received faster than this interval are dropped.",
+)
+
+AGENTIC_NON_STREAMING_IMAGE_PRUNING_TARGET_AMOUNT = flags.DEFINE_integer(
+    "agent.non_streaming_image_pruning_target_amount",
+    15,
+    "When the number of images in context exceeds"
+    " agent.non_streaming_image_pruning_trigger_amount, prune down to this"
+    " number. This batch pruning strategy preserves the prefill cache by"
+    " keeping the conversation prefix stable between pruning events.",
+)
+
+AGENTIC_NON_STREAMING_DISCARD_IMAGES_AFTER_TURN = flags.DEFINE_bool(
+    "agent.non_streaming_discard_images_after_turn",
+    True,
+    "Whether to discard buffered images after each turn (user message or"
+    " function response). When True (default), images are cleared after being"
+    " used. When False, images accumulate and are sent with subsequent turns.",
+)
+
+AGENTIC_NON_STREAMING_FR_LATEST_IMAGE_ONLY = flags.DEFINE_bool(
+    "agent.non_streaming_fr_latest_image_only",
+    True,
+    "When enabled, only the latest image per stream (or the latest stitched"
+    " frame) captured during tool execution is attached to the function"
+    " response. When disabled, all images from the FC-FR window are attached.",
+)
+
+AGENTIC_NON_STREAMING_INCLUDE_STREAM_NAMES = flags.DEFINE_bool(
+    "agent.non_streaming_include_stream_names",
+    True,
+    "Whether to prepend stream/camera name text labels before each image in"
+    " non-stitching mode. When True (default), a text part with the camera"
+    " name is added before each image. When False, only the raw image bytes"
+    " are included, saving tokens.",
+)
+
+AGENTIC_NON_STREAMING_THINKING_LEVEL = flags.DEFINE_string(
+    "agent.non_streaming_thinking_level",
+    None,
+    "The thinking level for the non-streaming handler"
+    " (MINIMAL, LOW, MEDIUM, HIGH).",
+)
+
+# Agent model generation parameters (for non-streaming handler).
+AGENTIC_AGENT_TEMPERATURE = flags.DEFINE_float(
+    "agent.temperature",
+    None,
+    "Temperature for the agent model (0.0-2.0). None uses server default.",
+)
+
+AGENTIC_AGENT_MAX_OUTPUT_TOKENS = flags.DEFINE_integer(
+    "agent.max_output_tokens",
+    None,
+    "Max output tokens for agent responses. None uses server default.",
+)
+
+AGENTIC_AGENT_THINKING_BUDGET = flags.DEFINE_integer(
+    "agent.thinking_budget",
+    None,
+    "Thinking budget for the agent model. 0=disabled, -1=auto, None=default.",
+)
+
+AGENTIC_AGENT_MEDIA_RESOLUTION = flags.DEFINE_enum_class(
+    "agent.media_resolution",
+    default=genai_types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+    enum_class=genai_types.MediaResolution,
+    help=(
+        "Media resolution for images. LOW=280, MEDIUM=560, HIGH=1120,"
+        " ULTRA_HIGH=2240 tokens."
+    ),
+)
+
+AGENTIC_ORCHESTRATOR_HANDLER_TYPE = flags.DEFINE_enum_class(
+    "agent.orchestrator_handler_type",
+    default=types.OrchestratorHandlerType.STREAMING,
+    enum_class=types.OrchestratorHandlerType,
+    help=(
+        "The type of orchestrator handler to use. STREAMING uses the Live API,"
+        " NONSTREAMING_GENAI uses the GenAI generate_content API,"
+        " NONSTREAMING_EVERGREEN uses the internal Evergreen model_client API."
+    ),
+)
+
+
+AGENTIC_NON_STREAMING_ENABLE_CONTEXT_SNAPSHOT_LOGGING = flags.DEFINE_bool(
+    "agent.enable_non_streaming_context_snapshot_logging",
+    True,
+    "Whether to log full conversation context snapshots to the event bus on"
+    " every model call. When enabled, the entire conversation history"
+    " (including images, function calls, and thought signatures) is logged"
+    " as a CONTEXT_SNAPSHOT event.",
+)
+
 # ------------------------
 # Success detection flags.
 # ------------------------
@@ -275,8 +449,16 @@ AGENTIC_SD_MODEL_NAME = flags.DEFINE_string(
 AGENTIC_SD_THINKING_BUDGET = flags.DEFINE_integer(
     "sd.thinking_budget",
     -1,
-    "The thinking budget for the success detection model. 0 is DISABLED. -1 is"
-    " AUTOMATIC. The default values and allowed ranges are model dependent.",
+    "The thinking budget for Gemini 2.5 family success detection model. 0 is"
+    " DISABLED. -1 is AUTOMATIC. The default values and allowed ranges are"
+    " model dependent. Mutually exclusive with sd.thinking_level.",
+)
+
+AGENTIC_SD_THINKING_LEVEL = flags.DEFINE_string(
+    "sd.thinking_level",
+    None,
+    "The thinking level for Gemini 3 family success detection model "
+    "(MINIMAL, LOW, MEDIUM, HIGH). Mutually exclusive with sd.thinking_budget.",
 )
 
 AGENTIC_SD_USE_PROGRESS_PREDICTION = flags.DEFINE_bool(
@@ -388,6 +570,46 @@ AGENTIC_SD_SLEEP_INTERVAL_S = flags.DEFINE_float(
     "The sleep interval in seconds for the ensemble SD model.",
 )
 
+AGENTIC_SD_MAX_OUTPUT_TOKENS = flags.DEFINE_integer(
+    "sd.max_output_tokens",
+    None,
+    "Max output tokens for SD responses. None uses server default.",
+)
+
+AGENTIC_SD_MEDIA_RESOLUTION = flags.DEFINE_enum_class(
+    "sd.media_resolution",
+    default=genai_types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
+    enum_class=genai_types.MediaResolution,
+    help=(
+        "Media resolution for SD images. LOW=280, MEDIUM=560, HIGH=1120,"
+        " ULTRA_HIGH=2240 tokens."
+    ),
+)
+
+AGENTIC_SD_STITCH_MODE = flags.DEFINE_enum_class(
+    "sd.stitch_mode",
+    default=SdStitchMode.NONE,
+    enum_class=SdStitchMode,
+    help="Image stitching mode for success detection. Options:"
+    " 'none' (send individual images),"
+    " 'camera' (stitch all cameras into one image per timepoint),"
+    " 'time' (stitch start+current per camera).",
+)
+
+AGENTIC_SD_PROMPT_FILE = flags.DEFINE_string(
+    "sd.prompt_file",
+    None,
+    "Path to a file containing the SD question prompt. If set, overrides the"
+    " default prompt. Use {subtask} placeholder for the task name.",
+)
+
+AGENTIC_SD_PROMPT_NAME = flags.DEFINE_string(
+    "sd.prompt_name",
+    None,
+    "Prompt name from sd_prompts.py registry. If unset, uses mode-appropriate"
+    " default (new_no_stitch, new_camera, new_time).",
+)
+
 # ------------------------
 # Scene description flags.
 # ------------------------
@@ -452,4 +674,25 @@ AGENTIC_LOGGING_OUTPUT_DIRECTORY = flags.DEFINE_string(
     "logging.output_directory",
     "/tmp/safari_logs",
     "The output directory for the logs.",
+)
+
+AGENTIC_LOGGING_SESSION_LOG_TYPE_KEY = flags.DEFINE_string(
+    "logging.session_log_type_key",
+    None,
+    "The key of the session log type.",
+)
+
+AGENTIC_LOGGING_SESSION_LOG_TYPE_VALUE = flags.DEFINE_string(
+    "logging.session_log_type_value",
+    "agent",
+    "The value of the session log type.",
+)
+
+AGENTIC_EXCLUDE_MODEL_IMAGE_INPUT_LOGGING = flags.DEFINE_bool(
+    "logging.exclude_model_image_input_logging",
+    False,
+    "Whether to exclude MODEL_IMAGE_INPUT events from being logged to the"
+    " event stream. These are the most frequent event type and are currently"
+    " unused by downstream consumers. Enabling this reduces log size and"
+    " improves logging performance.",
 )

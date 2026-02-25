@@ -129,6 +129,9 @@ RESPONSE = interface.RESPONSE
 JOB_TYPE = interface.JOB_TYPE
 WORK_UNIT = interface.WORK_UNIT
 WORK_UNIT_OUTCOME = interface.WORK_UNIT_OUTCOME
+WORK_UNIT_QUESTION = interface.WORK_UNIT_QUESTION
+QUESTION_CONDITION = interface.QUESTION_CONDITION
+QUESTION_ANSWER_TYPE = interface.QUESTION_ANSWER_TYPE
 ACCEPTED_IMAGE_TYPES = interface.ACCEPTED_IMAGE_TYPES
 IMAGE_FORMAT = interface.IMAGE_FORMAT
 DRAW_CIRCLE_ICON = interface.DRAW_CIRCLE_ICON
@@ -140,10 +143,25 @@ DRAW_CONTAINER = interface.DRAW_CONTAINER
 _ERROR_NO_ACTIVE_CONNECTION = (
     "OrchestratorHelper: No active connection. Please call connect() first."
 )
+_ERROR_NO_ROBOT_ID_OR_HOSTNAME_SET = (
+    "OrchestratorHelper: Either robot_id or hostname must be set."
+)
+_ERROR_BOTH_ROBOT_ID_AND_HOSTNAME_SET = (
+    "OrchestratorHelper: Only one of robot_id or hostname should be set. If you"
+    " wish to use hostname instead of robot_id, please set the value of"
+    " robot_id as an empty string."
+)
 
 
 class OrchestratorHelper:
   """Helper to simplify usage of Orchestrator Client API calls."""
+
+  _interface: interface.OrchestratorInterface | None = None
+  _interface_type: type[interface.OrchestratorInterface] | None = None
+  _robot_id: str | None
+  _job_type: JOB_TYPE
+  _raise_error: bool
+  _hostname: str | None
 
   def __init__(
       self,
@@ -151,26 +169,57 @@ class OrchestratorHelper:
       robot_id: str,
       job_type: JOB_TYPE,
       raise_error: bool = False,
+      hostname: str | None = None,
+      observer_mode: bool = False,
+      interface_type: type[interface.OrchestratorInterface] | None = None,
   ):
-    self._interface: interface.OrchestratorInterface = None
+    """Initializes the OrchestratorHelper instance.
+
+    Args:
+      robot_id: The ID of the robot to connect to the orchestrator server.
+      job_type: The type of job to connect to the orchestrator server.
+      raise_error: Whether to raise an error if the orchestrator server returns
+        an error.
+      hostname: [Optional] The hostname of the robot to connect as. This is used
+        if the robot_id is not known.
+      observer_mode: [Optional] Whether the robot is in observer mode.
+      interface_type: [Optional] The type of interface to use; default is
+        interface.OrchestratorInterface. Such a type must be a subclass of
+        interface.OrchestratorInterface.
+    """
+    self._interface_type = interface_type or interface.OrchestratorInterface
+    self._interface = None
     self._robot_id = robot_id
     self._job_type = job_type
     self._raise_error = raise_error
+    self._hostname = hostname
+    self._observer_mode = observer_mode
+
+    if not robot_id and not hostname:
+      raise ValueError(_ERROR_NO_ROBOT_ID_OR_HOSTNAME_SET)
+
+    if robot_id and hostname:
+      raise ValueError(_ERROR_BOTH_ROBOT_ID_AND_HOSTNAME_SET)
 
   def connect(self) -> RESPONSE:
     """Connects to the orchestrator server."""
     if self._interface is not None:
       self._interface.disconnect()
 
-    self._interface = interface.OrchestratorInterface(
+    self._interface = self._interface_type(
         robot_id=self._robot_id,
         job_type=self._job_type,
+        hostname=self._hostname,
+        observer_mode=self._observer_mode,
     )
+
     response = self._interface.connect()
     if not response.success:
       self._interface = None
       if self._raise_error:
         raise ValueError(response.error_message)
+    if not self._robot_id:
+      self._robot_id = response.robot_id
     return response
 
   def disconnect(self) -> None:
@@ -245,6 +294,25 @@ class OrchestratorHelper:
       return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
 
     return self._interface.get_current_robot_job_work_unit()
+
+  def observe_latest_work_unit(self) -> RESPONSE:
+    """Observe the status of the latest work unit.
+
+    This is similar to "get_current_work_unit()", but can only be used if the
+    Orchestrator Helper is set to observer mode. This will get the full details
+    of the latest active work unit that the robot is associated with.
+
+    Returns:
+      RESPONSE: The response object containing the work unit information or an
+      error message if the connection is not active or the Orchestrator Helper
+      is not in observer mode.
+    """
+    if self._interface is None:
+      if self._raise_error:
+        raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+
+    return self._interface.observe_latest_work_unit()
 
   def is_visual_overlay_in_current_work_unit(self) -> RESPONSE:
     """Checks if the current work unit has visual overlay information."""
@@ -412,12 +480,36 @@ class OrchestratorHelper:
 
     return self._interface.robot_job_work_unit_start_execution()
 
+  def insert_session_info(
+      self,
+      session_log_type: str,
+      session_start_time_ns: int,
+      session_end_time_ns: int,
+      session_note: str | None = None,
+  ) -> RESPONSE:
+    """Inserts additional session info for the current work unit."""
+    if self._interface is None:
+      if self._raise_error:
+        raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+
+    return self._interface.robot_job_work_unit_insert_session_info(
+        session_log_type=session_log_type,
+        session_start_time_ns=session_start_time_ns,
+        session_end_time_ns=session_end_time_ns,
+        session_note=session_note if session_note else "",
+    )
+
   def complete_work_unit(
       self,
       outcome: WORK_UNIT_OUTCOME,
       note: str,
       success_score: float | None = None,
       success_score_definition: str | None = None,
+      session_start_time_ns: int | None = None,
+      session_end_time_ns: int | None = None,
+      session_log_type: str | None = None,
+      response_to_questions: list[WORK_UNIT_QUESTION] | None = None,
   ) -> RESPONSE:
     """Sets the current work unit's stage as completed."""
     if self._interface is None:
@@ -429,6 +521,10 @@ class OrchestratorHelper:
         outcome=outcome,
         success_score=success_score,
         success_score_definition=success_score_definition,
+        session_start_time_ns=session_start_time_ns,
+        session_end_time_ns=session_end_time_ns,
+        session_log_type=session_log_type,
+        response_to_questions=response_to_questions,
         note=note,
     )
 

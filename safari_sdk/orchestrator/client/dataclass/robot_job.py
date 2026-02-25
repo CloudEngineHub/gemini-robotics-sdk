@@ -26,6 +26,7 @@ class RobotJob:
   """Orchestrator robot job information."""
 
   robotJobId: str | None = None
+  launchCommand: str | None = None
 
 
 @dataclasses_json.dataclass_json

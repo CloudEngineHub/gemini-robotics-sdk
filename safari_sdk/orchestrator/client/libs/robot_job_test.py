@@ -58,7 +58,10 @@ class RobotJobTest(absltest.TestCase):
 
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().allocateRobotJob().execute.return_value = {
-        "robotJob": {"robotJobId": "test_robot_job_id"}
+        "robotJob": {
+            "robotJobId": "test_robot_job_id",
+            "launchCommand": "test_launch_command",
+        }
     }
 
     robot_job_lib = robot_job.OrchestratorRobotJob(
@@ -70,6 +73,7 @@ class RobotJobTest(absltest.TestCase):
     self.assertTrue(response.success)
     self.assertEqual(response.robot_id, "test_robot_id")
     self.assertEqual(response.robot_job_id, "test_robot_job_id")
+    self.assertEqual(response.launch_command, "test_launch_command")
 
   def test_request_robot_job_bad_server_call(self):
 

@@ -17,9 +17,14 @@ syntax = "proto2";
 package safari_sdk.protos.logging;
 
 import "safari_sdk/protos/logging/feature_specs.proto";
+import "safari_sdk/protos/logging/policy_type.proto";
 
 // Metadata related to the policy and environment.
-// Next ID: 2
+// Next ID: 5
 message PolicyEnvironmentMetadata {
   optional FeatureSpecs feature_specs = 1;
+  optional PolicyType policy_type = 2;
+  optional string embodiment_version = 3;
+  // The control timestep of the environment in seconds.
+  optional double control_timestep = 4;
 }

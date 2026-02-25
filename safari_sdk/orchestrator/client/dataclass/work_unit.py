@@ -430,6 +430,112 @@ class SuccessScore:
       self.definition = ""
 
 
+class QuestionCondition(enum.Enum):
+  """Question condition enum."""
+
+  QUESTION_CONDITION_UNSPECIFIED = "QUESTION_CONDITION_UNSPECIFIED"
+  QUESTION_CONDITION_ALWAYS = "QUESTION_CONDITION_ALWAYS"
+  QUESTION_CONDITION_ONLY_SUCCESS_EPISODE = (
+      "QUESTION_CONDITION_ONLY_SUCCESS_EPISODE"
+  )
+  QUESTION_CONDITION_ONLY_FAILED_EPISODE = (
+      "QUESTION_CONDITION_ONLY_FAILED_EPISODE"
+  )
+  QUESTION_CONDITION_ONLY_INVALID_EPISODE = (
+      "QUESTION_CONDITION_ONLY_INVALID_EPISODE"
+  )
+  QUESTION_CONDITION_ESTOP_NOT_PRESSED = (
+      "QUESTION_CONDITION_ESTOP_NOT_PRESSED"
+  )
+  QUESTION_CONDITION_ESTOP_PRESSED = "QUESTION_CONDITION_ESTOP_PRESSED"
+
+  def num_value(self) -> int:
+    match self:
+      case QuestionCondition.QUESTION_CONDITION_ALWAYS:
+        return 1
+      case QuestionCondition.QUESTION_CONDITION_ONLY_SUCCESS_EPISODE:
+        return 2
+      case QuestionCondition.QUESTION_CONDITION_ONLY_FAILED_EPISODE:
+        return 3
+      case QuestionCondition.QUESTION_CONDITION_ONLY_INVALID_EPISODE:
+        return 4
+      case QuestionCondition.QUESTION_CONDITION_ESTOP_NOT_PRESSED:
+        return 5
+      case QuestionCondition.QUESTION_CONDITION_ESTOP_PRESSED:
+        return 6
+      case _:
+        return 0
+
+
+class AnswerType(enum.Enum):
+  """Answer type enum."""
+
+  ANSWER_TYPE_UNSPECIFIED = "ANSWER_TYPE_UNSPECIFIED"
+  ANSWER_TYPE_OPEN_ENDED = "ANSWER_TYPE_OPEN_ENDED"
+  ANSWER_TYPE_SINGLE_CHOICE = "ANSWER_TYPE_SINGLE_CHOICE"
+  ANSWER_TYPE_MULTIPLE_CHOICE = "ANSWER_TYPE_MULTIPLE_CHOICE"
+  ANSWER_TYPE_TRUE_FALSE = "ANSWER_TYPE_TRUE_FALSE"
+  ANSWER_TYPE_YES_NO = "ANSWER_TYPE_YES_NO"
+
+  def num_value(self) -> int:
+    match self:
+      case AnswerType.ANSWER_TYPE_OPEN_ENDED:
+        return 1
+      case AnswerType.ANSWER_TYPE_SINGLE_CHOICE:
+        return 2
+      case AnswerType.ANSWER_TYPE_MULTIPLE_CHOICE:
+        return 3
+      case AnswerType.ANSWER_TYPE_TRUE_FALSE:
+        return 4
+      case AnswerType.ANSWER_TYPE_YES_NO:
+        return 5
+      case _:
+        return 0
+
+
+@dataclasses_json.dataclass_json
+@dataclasses.dataclass(kw_only=True)
+class Question:
+  """Question information."""
+
+  question: str | None = None
+  whenToAsk: list[QuestionCondition] | None = None
+  answerFormat: AnswerType | None = None
+  allowedAnswers: list[str] | None = None
+  userAnswers: list[str] | None = None
+  wasDisplayed: bool | None = None
+  questionnaireId: str | None = None
+
+  def __post_init__(self):
+    if self.question is None:
+      self.question = ""
+
+    if self.whenToAsk is None:
+      self.whenToAsk = []
+    else:
+      for i, when_to_ask in enumerate(self.whenToAsk):
+        if isinstance(when_to_ask, str):
+          self.whenToAsk[i] = QuestionCondition(when_to_ask)
+
+    if self.answerFormat is None:
+      self.answerFormat = AnswerType.ANSWER_TYPE_UNSPECIFIED
+    else:
+      if isinstance(self.answerFormat, str):
+        self.answerFormat = AnswerType(self.answerFormat)
+
+    if self.allowedAnswers is None:
+      self.allowedAnswers = []
+
+    if self.userAnswers is None:
+      self.userAnswers = []
+
+    if self.wasDisplayed is None:
+      self.wasDisplayed = False
+
+    if self.questionnaireId is None:
+      self.questionnaireId = ""
+
+
 @dataclasses_json.dataclass_json
 @dataclasses.dataclass(kw_only=True)
 class WorkUnitContext:
@@ -442,6 +548,7 @@ class WorkUnitContext:
   policyDetails: PolicyDetails | None = None
   robotJobAssets: list[RobotJobAsset] | None = None
   successScores: list[SuccessScore] | None = None
+  questions: list[Question] | None = None
 
 
 @dataclasses_json.dataclass_json
