@@ -67,6 +67,10 @@ dynamic = ["version"]
 provider = "scikit_build_core.metadata.regex"
 input = "safari_sdk/__init__.py"
 
+[tool.scikit-build.wheel]
+platlib = true
+exclude = ["**/*_test.py", "**/*_test.cc"]
+
 [tool.scikit-build.sdist]
 # scikit_build_core uses .gitignore to exclude files from the package, so add
 # any files which are excluded from git but *included* in the pip package here.

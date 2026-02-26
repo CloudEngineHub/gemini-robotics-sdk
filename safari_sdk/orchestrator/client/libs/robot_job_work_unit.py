@@ -46,27 +46,27 @@ _ERROR_GET_WORK_UNIT = (
 )
 _ERROR_EMPTY_RESPONSE = (
     "OrchestratorRobotJobWorkUnit: Received empty response for work unit"
-    " request."
+    " request. "
 )
 _ERROR_EMPTY_WORK_UNIT = (
     "OrchestratorRobotJobWorkUnit: Received empty work unit in response for"
-    " work unit request."
+    " work unit request. "
 )
 _ERROR_WORK_UNIT_SOFTWARE_ASSET_PREP = (
     "OrchestratorRobotJobWorkUnit: Error in starting work unit software asset"
-    " prep."
+    " prep. "
 )
 _ERROR_WORK_UNIT_SCENE_PREP = (
-    "OrchestratorRobotJobWorkUnit: Error in starting work unit scene prep."
+    "OrchestratorRobotJobWorkUnit: Error in starting work unit scene prep. "
 )
 _ERROR_WORK_UNIT_EXECUTION = (
-    "OrchestratorRobotJobWorkUnit: Error in starting work unit execution."
+    "OrchestratorRobotJobWorkUnit: Error in starting work unit execution. "
 )
 _ERROR_WORK_UNIT_INSERT_SESSION_INFO = (
-    "OrchestratorRobotJobWorkUnit: Error in inserting session info."
+    "OrchestratorRobotJobWorkUnit: Error in inserting session info. "
 )
 _ERROR_WORK_UNIT_COMPLETED = (
-    "OrchestratorRobotJobWorkUnit: Error in completing work unit."
+    "OrchestratorRobotJobWorkUnit: Error in completing work unit. "
 )
 _ERROR_WORK_UNIT_IN_EXECUTION_STAGE = (
     "OrchestratorRobotJobWorkUnit: Work unit is not in execution stage."
@@ -93,11 +93,11 @@ _ERROR_OBSERVE_LATEST_WORK_UNIT = (
 )
 _ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT_RESPONSE = (
     "OrchestratorRobotJobWorkUnit: Received empty response for observe latest"
-    " work unit request."
+    " work unit request. "
 )
 _ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT = (
     "OrchestratorRobotJobWorkUnit: Received empty work unit in response for"
-    " observe latest work unit request."
+    " observe latest work unit request. "
 )
 
 
@@ -156,10 +156,12 @@ class OrchestratorRobotJobWorkUnit:
 
     self._work_unit_in_execution_stage = False
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "robot_job_id": self._robot_job_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -170,7 +172,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_GET_WORK_UNIT
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -180,7 +182,7 @@ class OrchestratorRobotJobWorkUnit:
           no_more_work_unit=True,
           robot_job_id=self._robot_job_id,
           launch_command=self._launch_command,
-          error_message=_ERROR_EMPTY_RESPONSE
+          error_message=_ERROR_EMPTY_RESPONSE + error_id
       )
 
     as_json = json.dumps(response)
@@ -188,7 +190,7 @@ class OrchestratorRobotJobWorkUnit:
 
     if not self._current_work_unit.workUnit:
       self._current_work_unit = None
-      return _RESPONSE(error_message=_ERROR_EMPTY_WORK_UNIT)
+      return _RESPONSE(error_message=_ERROR_EMPTY_WORK_UNIT + error_id)
 
     self._current_work_unit = self._current_work_unit.workUnit
     return _RESPONSE(
@@ -212,10 +214,12 @@ class OrchestratorRobotJobWorkUnit:
     if not work_unit_response.success:
       return work_unit_response
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "work_unit_id": work_unit_response.work_unit_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -227,7 +231,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_WORK_UNIT_SOFTWARE_ASSET_PREP
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -253,10 +257,12 @@ class OrchestratorRobotJobWorkUnit:
     if not work_unit_response.success:
       return work_unit_response
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "work_unit_id": work_unit_response.work_unit_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -268,7 +274,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_WORK_UNIT_SCENE_PREP
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -294,10 +300,12 @@ class OrchestratorRobotJobWorkUnit:
     if not work_unit_response.success:
       return work_unit_response
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "work_unit_id": work_unit_response.work_unit_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -309,7 +317,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_WORK_UNIT_EXECUTION
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -350,6 +358,8 @@ class OrchestratorRobotJobWorkUnit:
     if session_end_time_ns and len(str(session_end_time_ns)) != 19:
       return _RESPONSE(error_message=_ERROR_BAD_SESSION_END_TIME)
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "work_unit_id": self._current_work_unit.workUnitId,
@@ -357,7 +367,7 @@ class OrchestratorRobotJobWorkUnit:
         "session_start_time_ns": session_start_time_ns,
         "session_end_time_ns": session_end_time_ns,
         "session_note": session_note,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -366,7 +376,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_WORK_UNIT_INSERT_SESSION_INFO
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -413,12 +423,14 @@ class OrchestratorRobotJobWorkUnit:
     if not work_unit_response.success:
       return work_unit_response
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "work_unit_id": work_unit_response.work_unit_id,
         "outcome": outcome.num_value(),
         "note": note,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
     if success_score is not None:
       body["success_score"] = {
@@ -465,7 +477,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_WORK_UNIT_COMPLETED
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -484,10 +496,12 @@ class OrchestratorRobotJobWorkUnit:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "job_type": job_type.value,
         "robot_id": self._robot_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -500,7 +514,7 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           error_message=(
               _ERROR_OBSERVE_LATEST_WORK_UNIT
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -508,14 +522,18 @@ class OrchestratorRobotJobWorkUnit:
       return _RESPONSE(
           success=True,
           no_more_work_unit=True,
-          error_message=_ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT_RESPONSE,
+          error_message=(
+              _ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT_RESPONSE + error_id
+          ),
       )
 
     as_json = json.dumps(response)
     current_work_unit = work_unit.WorkUnitResponse.from_json(as_json)
 
     if not current_work_unit.workUnit:
-      return _RESPONSE(error_message=_ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT)
+      return _RESPONSE(
+          error_message=_ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT + error_id
+      )
 
     return _RESPONSE(
         success=True,

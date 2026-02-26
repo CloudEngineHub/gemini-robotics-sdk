@@ -102,8 +102,9 @@ class RobotJobTest(absltest.TestCase):
     self.assertFalse(response.success)
     self.assertIn(robot_job._ERROR_GET_ROBOT_JOB, response.error_message)
 
-  def test_request_robot_job_no_more_robot_job(self):
-
+  @mock.patch("time.time_ns")
+  def test_request_robot_job_no_more_robot_job(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().allocateRobotJob().execute.return_value = {
         "robotJob": {}
@@ -117,10 +118,14 @@ class RobotJobTest(absltest.TestCase):
     response = robot_job_lib.request_robot_job()
     self.assertTrue(response.success)
     self.assertTrue(response.no_more_robot_job)
-    self.assertEqual(response.error_message, robot_job._ERROR_EMPTY_RESPONSE)
+    self.assertEqual(
+        response.error_message,
+        robot_job._ERROR_EMPTY_RESPONSE + "[Error ID: 123456789]",
+    )
 
-  def test_request_robot_job_bad_response_robot_job_id(self):
-
+  @mock.patch("time.time_ns")
+  def test_request_robot_job_bad_response_robot_job_id(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().allocateRobotJob().execute.return_value = {
         "robotJob": {"robotJobId": ""}
@@ -134,7 +139,8 @@ class RobotJobTest(absltest.TestCase):
     response = robot_job_lib.request_robot_job()
     self.assertFalse(response.success)
     self.assertEqual(
-        response.error_message, robot_job._ERROR_EMPTY_ROBOT_JOB_ID
+        response.error_message,
+        robot_job._ERROR_EMPTY_ROBOT_JOB_ID + "[Error ID: 123456789]",
     )
 
 

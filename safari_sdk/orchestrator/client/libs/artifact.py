@@ -30,7 +30,7 @@ _ERROR_NO_ORCHESTRATOR_CONNECTION = (
 )
 _ERROR_GET_ARTIFACT = "OrchestratorArtifact: Error in requesting artifact.\n"
 _ERROR_EMPTY_RESPONSE = (
-    "OrchestratorArtifact: Received empty response for get artifact request."
+    "OrchestratorArtifact: Received empty response for get artifact request. "
 )
 
 
@@ -54,7 +54,9 @@ class OrchestratorArtifact:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
-    body = {"artifact_id": artifact_id, "tracer": time.time_ns()}
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
+    body = {"artifact_id": artifact_id, "tracer": tracer}
 
     try:
       response = (
@@ -64,19 +66,19 @@ class OrchestratorArtifact:
       return _RESPONSE(
           error_message=(
               _ERROR_GET_ARTIFACT
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
     if not response or "artifact" not in response:
-      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE)
+      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     as_json = json.dumps(response)
     artifact_response = artifact.LoadArtifactResponse.from_json(as_json)
 
     artifact_obj = artifact_response.artifact
     if not artifact_obj or not artifact_obj.uri:
-      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE)
+      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     return _RESPONSE(success=True, artifact=artifact_obj)
 
@@ -88,7 +90,9 @@ class OrchestratorArtifact:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
-    body = {"artifact_id": artifact_id, "tracer": time.time_ns()}
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
+    body = {"artifact_id": artifact_id, "tracer": tracer}
 
     try:
       response = (
@@ -98,18 +102,18 @@ class OrchestratorArtifact:
       return _RESPONSE(
           error_message=(
               _ERROR_GET_ARTIFACT
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
     if not response:
-      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE)
+      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     as_json = json.dumps(response)
     artifact_response = artifact.LoadArtifactResponse.from_json(as_json)
 
     if not artifact_response or not artifact_response.artifact:
-      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE)
+      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     artifact_obj = artifact_response.artifact
 

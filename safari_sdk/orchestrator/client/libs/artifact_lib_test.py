@@ -90,25 +90,33 @@ class ArtifactTest(absltest.TestCase):
     self.assertFalse(response.success)
     self.assertIn(artifact._ERROR_GET_ARTIFACT, response.error_message)
 
-  def test_get_artifact_empty_response(self):
-
+  @mock.patch("time.time_ns")
+  def test_get_artifact_empty_response(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().loadArtifact().execute.return_value = {}
     artifact_lib = artifact.OrchestratorArtifact(connection=mock_connection)
 
     response = artifact_lib.get_artifact(artifact_id="test_artifact_id")
     self.assertFalse(response.success)
-    self.assertEqual(artifact._ERROR_EMPTY_RESPONSE, response.error_message)
+    self.assertEqual(
+        artifact._ERROR_EMPTY_RESPONSE + "[Error ID: 123456789]",
+        response.error_message,
+    )
 
-  def test_get_artifact_none_response(self):
-
+  @mock.patch("time.time_ns")
+  def test_get_artifact_none_response(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().loadArtifact().execute.return_value = None
     artifact_lib = artifact.OrchestratorArtifact(connection=mock_connection)
 
     response = artifact_lib.get_artifact(artifact_id="test_artifact_id")
     self.assertFalse(response.success)
-    self.assertEqual(artifact._ERROR_EMPTY_RESPONSE, response.error_message)
+    self.assertEqual(
+        artifact._ERROR_EMPTY_RESPONSE + "[Error ID: 123456789]",
+        response.error_message,
+    )
 
   def test_get_artifact_bad_connection(self):
     artifact_lib = artifact.OrchestratorArtifact(connection=None)
@@ -135,7 +143,9 @@ class ArtifactTest(absltest.TestCase):
         artifact._ERROR_NO_ORCHESTRATOR_CONNECTION, response.error_message
     )
 
-  def test_get_artifact_uri_get_artifact_fails(self):
+  @mock.patch("time.time_ns")
+  def test_get_artifact_uri_get_artifact_fails(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().loadArtifact().execute.return_value = {
         "success": False,
@@ -150,7 +160,7 @@ class ArtifactTest(absltest.TestCase):
     self.assertFalse(response.success)
     self.assertEqual(
         "OrchestratorArtifact: Received empty response for get artifact"
-        " request.",
+        " request. [Error ID: 123456789]",
         response.error_message,
     )
 

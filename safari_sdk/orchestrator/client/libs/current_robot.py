@@ -59,14 +59,16 @@ class OrchestratorCurrentRobotInfo:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     if not self._robot_id and self._hostname:
       body = {
           "robot_id": "request_robot_id_look_up",
           "hostname": self._hostname,
-          "tracer": time.time_ns(),
+          "tracer": tracer,
       }
     else:
-      body = {"robot_id": self._robot_id, "tracer": time.time_ns()}
+      body = {"robot_id": self._robot_id, "tracer": tracer}
 
     try:
       response = (
@@ -76,7 +78,7 @@ class OrchestratorCurrentRobotInfo:
       return _RESPONSE(
           error_message=(
               _ERROR_GET_CURRENT_ROBOT_INFO
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -103,10 +105,12 @@ class OrchestratorCurrentRobotInfo:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "operator_id": operator_id,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -118,7 +122,7 @@ class OrchestratorCurrentRobotInfo:
       return _RESPONSE(
           error_message=(
               _ERROR_SET_CURRENT_ROBOT_OPERATOR_ID
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 

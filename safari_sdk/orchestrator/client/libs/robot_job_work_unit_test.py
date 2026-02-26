@@ -199,8 +199,9 @@ class RobotJobWorkUnitTest(absltest.TestCase):
         robot_job_work_unit._ERROR_GET_WORK_UNIT, response.error_message
     )
 
-  def test_request_work_unit_no_more_work_unit(self):
-
+  @mock.patch("time.time_ns")
+  def test_request_work_unit_no_more_work_unit(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().allocateWorkUnit().execute.return_value = ""
 
@@ -217,7 +218,8 @@ class RobotJobWorkUnitTest(absltest.TestCase):
     self.assertTrue(response.no_more_work_unit)
     self.assertEqual(response.robot_job_id, "test_robot_job_id")
     self.assertEqual(
-        response.error_message, robot_job_work_unit._ERROR_EMPTY_RESPONSE
+        response.error_message,
+        robot_job_work_unit._ERROR_EMPTY_RESPONSE + "[Error ID: 123456789]",
     )
 
   def test_start_work_unit_software_asset_prep_good(self):
@@ -1213,8 +1215,9 @@ class RobotJobWorkUnitTest(absltest.TestCase):
         response.error_message,
     )
 
-  def test_observe_latest_work_unit_no_more_work_unit(self):
-
+  @mock.patch("time.time_ns")
+  def test_observe_latest_work_unit_no_more_work_unit(self, mock_time):
+    mock_time.return_value = 123456789
     mock_connection = mock.MagicMock()
     mock_connection.orchestrator().observeCurrentWorkUnit().execute.return_value = (
         ""
@@ -1232,7 +1235,10 @@ class RobotJobWorkUnitTest(absltest.TestCase):
     self.assertTrue(response.no_more_work_unit)
     self.assertEqual(
         response.error_message,
-        robot_job_work_unit._ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT_RESPONSE,
+        (
+            robot_job_work_unit._ERROR_EMPTY_OBSERVE_LATEST_WORK_UNIT_RESPONSE
+            + "[Error ID: 123456789]"
+        ),
     )
 
 

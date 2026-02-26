@@ -36,11 +36,11 @@ _ERROR_NO_ORCHESTRATOR_CONNECTION = (
 _ERROR_GET_ROBOT_JOB = "OrchestratorRobotJob: Error in requesting robot job.\n"
 
 _ERROR_EMPTY_RESPONSE = (
-    "OrchestratorRobotJob: Received empty response for robot job request."
+    "OrchestratorRobotJob: Received empty response for robot job request. "
 )
 _ERROR_EMPTY_ROBOT_JOB_ID = (
     "OrchestratorRobotJob: Received empty robot job ID in response for robot"
-    " job request."
+    " job request. "
 )
 
 
@@ -92,10 +92,12 @@ class OrchestratorRobotJob:
     if self._connection is None:
       return _RESPONSE(error_message=_ERROR_NO_ORCHESTRATOR_CONNECTION)
 
+    tracer = time.time_ns()
+    error_id = f"[Error ID: {tracer}]"
     body = {
         "robot_id": self._robot_id,
         "type": self._job_type.value,
-        "tracer": time.time_ns(),
+        "tracer": tracer,
     }
 
     try:
@@ -106,7 +108,7 @@ class OrchestratorRobotJob:
       return _RESPONSE(
           error_message=(
               _ERROR_GET_ROBOT_JOB
-              + f"Reason: {e.reason}\nDetail: {e.error_details}"
+              + f"{error_id} Reason: {e.reason}\nDetail: {e.error_details}"
           )
       )
 
@@ -115,19 +117,19 @@ class OrchestratorRobotJob:
 
     if not self._current_robot_job:
       self._current_robot_job = None
-      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE)
+      return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     if self._current_robot_job.robotJob.robotJobId is None:
       self._current_robot_job = None
       return _RESPONSE(
           success=True,
           no_more_robot_job=True,
-          error_message=_ERROR_EMPTY_RESPONSE
+          error_message=_ERROR_EMPTY_RESPONSE + error_id
       )
 
     if not self._current_robot_job.robotJob.robotJobId:
       self._current_robot_job = None
-      return _RESPONSE(error_message=_ERROR_EMPTY_ROBOT_JOB_ID)
+      return _RESPONSE(error_message=_ERROR_EMPTY_ROBOT_JOB_ID + error_id)
 
     self._current_robot_job = self._current_robot_job.robotJob
     return _RESPONSE(
