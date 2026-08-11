@@ -17,6 +17,7 @@
 import argparse
 import copy
 import datetime
+import itertools
 import json
 import os
 import pathlib
@@ -295,7 +296,7 @@ _PROPRIOCEPTION_KEYS = flags.DEFINE_list(
 _EMBODIMENT = flags.DEFINE_enum(
     name="embodiment",
     default=None,
-    enum_values=["trossen", "so101", "agibot", "cloid", "dexmate"],
+    enum_values=["trossen", "so101", "dexmate", "fr3_duo"],
     help="Required for gemini_robotics_on_device_v2 to specify the embodiment.",
 )
 flags.register_validator(
@@ -477,6 +478,7 @@ Commands:
     --training_recipe: The training recipe to use, one of [{', '.join(_RECIPE_TO_TYPE_MAP.keys())}]
     --max_episodes: The maximum number of demonstration episodes to use for training. (Optional) Episodes are randomly selected.
     --seed: Seed for deterministic episode sampling. Auto-generated if not set. Only applies to gemini_robotics_on_device_v1/v2. (Optional)
+    --only_successful_episodes: Whether to train only on successful episodes. (Optional)
   For gemini_robotics_on_device_v1/v2 recipes, the following flags are also available:
      --max_training_steps: The maximum number of training steps to use. (Optional)
      --checkpoint_every_n_steps: The number of steps to checkpoint. If not set, the default is max_training_steps / 5. (Optional)
@@ -485,6 +487,7 @@ Commands:
      --proprioception_keys: The proprioception keys to use for training.
        Required for gemini_robotics_on_device_v1/v2. Must be a subset of the
        proprioceptive_observation_keys logged by EpisodicLogger.
+     --embodiment: Required for gemini_robotics_on_device_v2 to specify the embodiment.
 
   data_stats: Show data stats currently available for training.
 
@@ -511,6 +514,7 @@ Commands:
       --image_keys: The image keys to use for serving. (Optional)
       --proprioception_keys: The proprioception keys to use for serving. (Optional)
       --docker_tag: The docker tag to use for serving. (Optional, default: latest)
+      --shm_size: Size of /dev/shm inside the docker container. (Optional, default: 8g)
 
       This will download the model and start a serving docker container.
 
@@ -543,7 +547,7 @@ def _strip_whitespace_from_flags() -> None:
             f"WARNING: --{flag.name} contained leading/trailing whitespace."
             f" Auto-corrected: {flag.value} -> {stripped}"
         )
-        flags.FLAGS[flag.name].value = stripped
+        setattr(flags.FLAGS, flag.name, stripped)
 
   # String flags.
   for flag in [
@@ -560,7 +564,7 @@ def _strip_whitespace_from_flags() -> None:
           f"WARNING: --{flag.name} contained leading/trailing whitespace."
           f" Auto-corrected: {value!r} -> {stripped!r}"
       )
-      flags.FLAGS[flag.name].value = stripped
+      setattr(flags.FLAGS, flag.name, stripped)
 
 
 def _natural_sort_key(s: str) -> tuple[int | str, ...]:
@@ -573,6 +577,26 @@ def _natural_sort_key(s: str) -> tuple[int | str, ...]:
     else:
       key.append(part)
   return tuple(key)
+
+
+def _resolve_non_existent_path(p: pathlib.Path) -> pathlib.Path:
+  """Resolves a path safely even if target files or directories do not exist."""
+  normalized = pathlib.Path(os.path.normpath(p))
+  curr = normalized
+  missing_parts = []
+  while not curr.exists() and curr != curr.parent:
+    missing_parts.append(curr.name)
+    curr = curr.parent
+
+  try:
+    resolved_parent = curr.resolve()
+  except (OSError, RuntimeError):
+    resolved_parent = curr
+
+  for part in reversed(missing_parts):
+    resolved_parent = resolved_parent / part
+
+  return pathlib.Path(os.path.normpath(resolved_parent))
 
 
 def _safe_tar_extract(tar: tarfile.TarFile, path: str | pathlib.Path) -> None:
@@ -588,7 +612,7 @@ def _safe_tar_extract(tar: tarfile.TarFile, path: str | pathlib.Path) -> None:
   for member in tar.getmembers():
     target_path = pathlib.Path(resolved_base, member.name)
     try:
-      resolved_target = target_path.resolve()
+      resolved_target = _resolve_non_existent_path(target_path)
     except Exception as e:
       raise PermissionError(
           "Blocked path traversal attempt in tar archive (failed to resolve):"
@@ -602,7 +626,7 @@ def _safe_tar_extract(tar: tarfile.TarFile, path: str | pathlib.Path) -> None:
       member_dir = target_path.parent
       link_target_path = pathlib.Path(member_dir, member.linkname)
       try:
-        resolved_link_target = link_target_path.resolve()
+        resolved_link_target = _resolve_non_existent_path(link_target_path)
       except Exception as e:
         raise PermissionError(
             "Blocked link traversal attempt in tar archive (failed to resolve"
@@ -646,30 +670,6 @@ class FlywheelCli:
 
     Needs task_id, start_date, end_date flags.
     """
-
-    # Validate recipe-specific flags.
-    is_v2 = _TRAINING_RECIPE.value == "gemini_robotics_on_device_v2"
-
-    if is_v2 and flags.FLAGS["checkpoint_type"].present:
-      raise ValueError(
-          "--checkpoint_type is not supported for the"
-          " gemini_robotics_on_device_v2 recipe. Use --embodiment instead to"
-          " specify the robot embodiment."
-      )
-
-    if is_v2 and not _EMBODIMENT.value:
-      raise ValueError(
-          "--embodiment is required for the gemini_robotics_on_device_v2"
-          " recipe. Must be one of: "
-          + ", ".join(flags.FLAGS["embodiment"].parser.enum_values)  # pytype: disable=attribute-error
-      )
-
-    if not is_v2 and _EMBODIMENT.value is not None:
-      raise ValueError(
-          "--embodiment is only supported for the"
-          " gemini_robotics_on_device_v2 recipe."
-      )
-
     body = copy.deepcopy(self._base_request_body)
     training_data_filters = {
         "robot_id": _ROBOT_ID.value,
@@ -800,7 +800,9 @@ class FlywheelCli:
         task_id = task_date.get("taskId")
         dates = task_date.get("dates")
         daily_counts = task_date.get("dailyCounts")
-        for date, daily_count in zip(dates, daily_counts):
+        for date, daily_count in itertools.zip_longest(
+            dates or [], daily_counts or [], fillvalue=None
+        ):
           rows.append([
               str(robot_id),
               str(task_id),
@@ -927,6 +929,7 @@ class FlywheelCli:
       mounts: Sequence[tuple[str, str]],
       docker_args: Sequence[str],
       checkpoint_display_path: str | pathlib.Path,
+      is_v2: bool,
   ) -> None:
     """Runs the serving docker container with the specified mounts and args."""
     try:
@@ -939,17 +942,20 @@ class FlywheelCli:
           "run",
           "-it",
           "--rm",
-          f"--shm-size={_SHM_SIZE.value}",
-          "--cap-add=IPC_LOCK",
-          "--ulimit",
-          "memlock=-1",
       ]
 
-      if os.name == "posix":
+      if is_v2:
         commands.extend([
-            "--user",
-            f"{os.getuid()}:{os.getgid()}",
+            f"--shm-size={_SHM_SIZE.value}",
+            "--cap-add=IPC_LOCK",
+            "--ulimit",
+            "memlock=-1",
         ])
+        if os.name == "posix":
+          commands.extend([
+              "--user",
+              f"{os.getuid()}:{os.getgid()}",
+          ])
 
       if not _USE_CPU.value:
         commands.extend([
@@ -1066,7 +1072,7 @@ class FlywheelCli:
       mounts.append((str(license_dir), "/license"))
       docker_args.append(f"--license_path=/license/{license_name}")
 
-    self._run_serving_docker(mounts, docker_args, checkpoint_path)
+    self._run_serving_docker(mounts, docker_args, checkpoint_path, is_v2=False)
 
   def _handle_serve_gemini_robotics_on_device_v2(self) -> None:
     """Handles the serve commands for gemini_robotics_on_device_v2."""
@@ -1137,7 +1143,7 @@ class FlywheelCli:
       )
 
     mounts = [(str(serve_dir), "/model")]
-    self._run_serving_docker(mounts, docker_args, checkpoint_path)
+    self._run_serving_docker(mounts, docker_args, checkpoint_path, is_v2=True)
 
   def handle_serve(self) -> None:
     """Handles the serve commands.
@@ -1388,14 +1394,24 @@ class FlywheelCli:
                 " --proprioception_keys to a subset of the proprioceptive"
                 " observation keys logged by EpisodicLogger."
             )
-        if (
-            _EMBODIMENT.value
-            and _TRAINING_RECIPE.value != "gemini_robotics_on_device_v2"
-        ):
+        is_v2 = _TRAINING_RECIPE.value == "gemini_robotics_on_device_v2"
+        if is_v2:
+          if flags.FLAGS["checkpoint_type"].present:
+            raise ValueError(
+                "--checkpoint_type is not supported for the"
+                " gemini_robotics_on_device_v2 recipe. Use --embodiment"
+                " instead to specify the robot embodiment."
+            )
+          if not _EMBODIMENT.value:
+            raise ValueError(
+                "--embodiment is required for the gemini_robotics_on_device_v2"
+                " recipe. Must be one of: "
+                + ", ".join(flags.FLAGS["embodiment"].parser.enum_values)  # pytype: disable=attribute-error
+            )
+        elif _EMBODIMENT.value is not None:
           raise ValueError(
               "--embodiment is only supported for the"
-              " gemini_robotics_on_device_v2 training recipe. Got:"
-              f" {_TRAINING_RECIPE.value}"
+              " gemini_robotics_on_device_v2 recipe."
           )
         self.handle_train()
       case "status":
@@ -1613,18 +1629,49 @@ def _format_date(date_str: str | None) -> str:
 
 def _handle_http_error(e: googleapiclient.errors.HttpError) -> None:
   """Formats and prints googleapiclient HttpError cleanly to stderr."""
-  status_code = getattr(e.resp, "status", "Unknown")
-  reason = getattr(e.resp, "reason", "HTTP Error")
+  resp = getattr(e, "resp", None)
+  status_code = (
+      getattr(resp, "status", None) or "Unknown"
+      if resp is not None
+      else "Unknown"
+  )
+  reason = (
+      getattr(resp, "reason", None) or "HTTP Error"
+      if resp is not None
+      else "HTTP Error"
+  )
+
   message = str(e)
-  if hasattr(e, "content") and e.content:
+  content = getattr(e, "content", None)
+  if content:
     try:
-      content_json = json.loads(e.content.decode("utf-8"))
+      match content:
+        case bytes():
+          content_str = content.decode("utf-8")
+        case str():
+          content_str = content
+        case _:
+          content_str = str(content)
+      content_json = json.loads(content_str)
       if isinstance(content_json, dict) and "error" in content_json:
         err = content_json["error"]
         if isinstance(err, dict):
-          message = err.get("message", message)
-          reason = err.get("status", reason)
-    except (json.JSONDecodeError, UnicodeDecodeError):
+          err_msg = err.get("message")
+          if err_msg:
+            message = str(err_msg)
+          err_status = err.get("status")
+          if err_status:
+            reason = str(err_status)
+        elif isinstance(err, str) and err:
+          message = err
+    except (
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+        KeyError,
+        TypeError,
+        ValueError,
+        AttributeError,
+    ):
       pass
   sys.stderr.write(
       f"\n[ERROR] API request failed (HTTP {status_code} - {reason}):"

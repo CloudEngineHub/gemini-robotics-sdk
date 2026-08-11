@@ -351,6 +351,61 @@ class UploadDataDirectoryTest(parameterized.TestCase):
         any('Failed to upload data2.mcap' in msg for msg in printed_calls)
     )
 
+  @mock.patch.object(upload_data, '_check_session_size')
+  @mock.patch.object(upload_data, '_upload_file')
+  @mock.patch.object(upload_data.auth, 'get_api_key')
+  def test_upload_data_directory_validation_error_continues_remaining_files(
+      self, mock_get_api_key, mock_upload_file, mock_check_session_size
+  ):
+    mock_get_api_key.return_value = 'test_api_key_123'
+    upload_data_dir = self.create_tempdir()
+    file1 = upload_data_dir.create_file(
+        'data1.mcap', content='dummy file content 1'
+    )
+    file2 = upload_data_dir.create_file(
+        'data2_invalid.mcap', content='dummy file content 2'
+    )
+    file3 = upload_data_dir.create_file(
+        'data3.mcap', content='dummy file content 3'
+    )
+
+    def check_size_side_effect(content_bytes):
+      if content_bytes == b'dummy file content 2':
+        raise ValueError('/session message is 2.0 MiB, which exceeds limit.')
+
+    mock_check_session_size.side_effect = check_size_side_effect
+    mock_upload_file.return_value = (200, 'OK')
+
+    with mock.patch('builtins.print') as mock_print:
+      uploaded_count, failed_count, already_uploaded = (
+          upload_data.upload_data_directory(
+              api_endpoint='https://example.com/upload',
+              data_directory=upload_data_dir.full_path,
+              robot_id='test_agent_001',
+          )
+      )
+
+    self.assertEqual(uploaded_count, 2)
+    self.assertEqual(failed_count, 1)
+    self.assertEqual(already_uploaded, 0)
+
+    # Check file renaming: file1 and file3 renamed, file2 remains unrenamed
+    self.assertTrue(os.path.exists(file1.full_path + '.uploaded'))
+    self.assertTrue(os.path.exists(file3.full_path + '.uploaded'))
+    self.assertFalse(os.path.exists(file2.full_path + '.uploaded'))
+    self.assertTrue(os.path.exists(file2.full_path))
+
+    # Check logged messages
+    printed_calls = [call[0][0] for call in mock_print.call_args_list]
+    self.assertTrue(any('Uploaded data1.mcap' in msg for msg in printed_calls))
+    self.assertTrue(
+        any(
+            'Failed to upload data2_invalid.mcap' in msg
+            for msg in printed_calls
+        )
+    )
+    self.assertTrue(any('Uploaded data3.mcap' in msg for msg in printed_calls))
+
 
 class UploadSingleFilePublicTest(parameterized.TestCase):
 

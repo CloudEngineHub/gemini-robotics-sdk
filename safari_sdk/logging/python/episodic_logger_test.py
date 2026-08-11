@@ -154,6 +154,61 @@ class EpisodicLoggerTest(parameterized.TestCase):
           },
       )
 
+  def test_session_manager_called_with_extra_topics(self):
+    timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+    action_spec = specs.BoundedArray(
+        shape=(5,),
+        dtype=np.float32,
+        minimum=np.array([-1.0, -2.0, -1.0, -2.0, 0.0], dtype=np.float32),
+        maximum=np.array([1.0, 1.0, 2.0, 3.0, 1.0], dtype=np.float32),
+    )
+
+    mock_session_manager = self.enter_context(
+        mock.patch.object(session_manager, "SessionManager", autospec=True)
+    )
+    episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id=_TEST_AGENT_ID,
+            task_id=_TEST_TASK_ID,
+            proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
+            output_directory=self._episode_path.full_path,
+            action_spec=action_spec,
+            timestep_spec=timestep_spec,
+            image_observation_keys=[],
+            policy_extra_spec={},
+            extra_stream_topics=("raw_pose", "my_custom_topic"),
+        )
+    )
+
+    mock_session_manager.assert_called_once()
+    _, kwargs = mock_session_manager.call_args
+    self.assertEqual(
+        kwargs["required_topics"],
+        {
+            constants.ACTION_TOPIC_NAME,
+            constants.TIMESTEP_TOPIC_NAME,
+        },
+    )
+    self.assertEqual(
+        kwargs["topics"],
+        {
+            constants.ACTION_TOPIC_NAME,
+            constants.TIMESTEP_TOPIC_NAME,
+            constants.POLICY_EXTRA_TOPIC_NAME,
+            "raw_pose",
+            "my_custom_topic",
+        },
+    )
+
   def test_data_is_written_correctly(self):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,

@@ -64,6 +64,9 @@ class EpisodicLoggerConfig:
     action_spec: The action spec.
     policy_extra_spec: The policy extra spec.
     metadata_config: The configuration for the session metadata.
+    extra_stream_topics: A sequence of extra topic names (like raw byte topics)
+      that you want to register in the session proto's `streams` list as
+      optional side-channels for SSOT linkage.
     validate_data_with_spec: Whether to validate the data with the spec.
     timestamp_key: The observation key that maps to the timestamps of each step
       in an episode. This is used to set the publish time of each MCAP message.
@@ -91,6 +94,7 @@ class EpisodicLoggerConfig:
           default_factory=session_metadata_lib.SessionMetadataConfig
       )
   )
+  extra_stream_topics: Sequence[str] = ()
   validate_data_with_spec: bool = True
   timestamp_key: str | None = None
   batch_size: int | None = None
@@ -150,6 +154,8 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         constants.TIMESTEP_TOPIC_NAME,
         constants.POLICY_EXTRA_TOPIC_NAME,
     }
+    if config.extra_stream_topics:
+      topics.update(config.extra_stream_topics)
     # Timestep and action are required to pass the SSOT consistency check.
     required_topics = {
         constants.ACTION_TOPIC_NAME,

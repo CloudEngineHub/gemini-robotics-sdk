@@ -26,6 +26,7 @@ import urllib.error
 from absl import flags
 from absl.testing import flagsaver
 from absl.testing import parameterized
+import googleapiclient.errors
 
 from absl.testing import absltest
 from safari_sdk.flywheel import flywheel_cli
@@ -390,7 +391,13 @@ class FlywheelCliTest(parameterized.TestCase):
       ):
         self._cli.handle_train()
 
-  def test_train_v2_with_embodiment(self):
+  @parameterized.named_parameters(
+      ("trossen", "trossen"),
+      ("so101", "so101"),
+      ("dexmate", "dexmate"),
+      ("fr3_duo", "fr3_duo"),
+  )
+  def test_train_v2_with_embodiment(self, embodiment):
     self.service_mock.startTraining.return_value.execute.return_value = {
         "training_job_id": "test_training_job_id"
     }
@@ -404,7 +411,7 @@ class FlywheelCliTest(parameterized.TestCase):
         "checkpoint_every_n_steps": 123,
         "image_keys": ["image1", "image2"],
         "proprioception_keys": ["prop1", "prop2"],
-        "embodiment": "trossen",
+        "embodiment": embodiment,
     }
     expected_body = {
         "training_data_filters": {
@@ -420,7 +427,7 @@ class FlywheelCliTest(parameterized.TestCase):
             "checkpoint_every_n_steps_count": 123,
             "image_keys": ["image1", "image2"],
             "proprioception_keys": ["prop1", "prop2"],
-            "embodiment": "trossen",
+            "embodiment": embodiment,
         },
     }
     with flagsaver.flagsaver(**req_flags):
@@ -697,6 +704,20 @@ class FlywheelCliTest(parameterized.TestCase):
           ["image1", "image2"],
           ["prop1", "prop2"],
       ),
+      (
+          "with_v1_docker_tag",
+          {
+              "model_checkpoint_path": "/test/path/model.chkpt",
+              "docker_tag": "1.2.1",
+          },
+          False,
+          60061,
+          0.8,
+          "/test/path/model.chkpt",
+          False,
+          [],
+          [],
+      ),
   )
   @mock.patch("subprocess.run")
   def test_serve_gemini_robotics_on_device_v1(
@@ -730,21 +751,13 @@ class FlywheelCliTest(parameterized.TestCase):
 
         file_dir = os.path.dirname(checkpoint_path)
         file_name = os.path.basename(checkpoint_path)
+        docker_tag = flags_dict.get("docker_tag", "latest")
         expected_docker_command = [
             "docker",
             "run",
             "-it",
             "--rm",
-            "--shm-size=8g",
-            "--cap-add=IPC_LOCK",
-            "--ulimit",
-            "memlock=-1",
         ]
-        if os.name == "posix":
-          expected_docker_command.extend([
-              "--user",
-              f"{os.getuid()}:{os.getgid()}",
-          ])
         if not use_cpu:
           expected_docker_command.extend([
               "--gpus",
@@ -761,7 +774,7 @@ class FlywheelCliTest(parameterized.TestCase):
             f"{port}:60061",
             "-v",
             f"{file_dir}:/checkpoint",
-            "google-deepmind/gemini_robotics_on_device:latest",
+            f"google-deepmind/gemini_robotics_on_device:{docker_tag}",
             f"--checkpoint_path=/checkpoint/{file_name}",
         ])
         if image_keys:
@@ -1358,6 +1371,13 @@ class FlywheelCliTest(parameterized.TestCase):
       self.assertIn(flywheel_cli._HELP_STRING, output)
       # Verify show_help includes argparse usage info (consistent with --help).
       self.assertIn("usage:", output)
+      for flag in (
+          "--embodiment:",
+          "--only_successful_episodes:",
+          "--seed:",
+          "--shm_size:",
+      ):
+        self.assertIn(flag, flywheel_cli._HELP_STRING)
 
   def test_cli_main_help(self):
     mock_stdout = io.StringIO()
@@ -1809,6 +1829,40 @@ class FlywheelCliTest(parameterized.TestCase):
               "image_keys": ["image1", "image2"],
               "proprioception_keys": ["prop1", "prop2"],
               "embodiment": "bad_embodiment",
+          },
+          flags.IllegalFlagValueError,
+      ),
+      (
+          "train_agibot_embodiment_type",
+          "train",
+          {
+              "api_key": "test_api_key",
+              "task_id": "test_task_id",
+              "start_date": "20240101",
+              "end_date": "20240102",
+              "training_recipe": "gemini_robotics_on_device_v2",
+              "max_training_steps": 12345,
+              "checkpoint_every_n_steps": 123,
+              "image_keys": ["image1", "image2"],
+              "proprioception_keys": ["prop1", "prop2"],
+              "embodiment": "agibot",
+          },
+          flags.IllegalFlagValueError,
+      ),
+      (
+          "train_cloid_embodiment_type",
+          "train",
+          {
+              "api_key": "test_api_key",
+              "task_id": "test_task_id",
+              "start_date": "20240101",
+              "end_date": "20240102",
+              "training_recipe": "gemini_robotics_on_device_v2",
+              "max_training_steps": 12345,
+              "checkpoint_every_n_steps": 123,
+              "image_keys": ["image1", "image2"],
+              "proprioception_keys": ["prop1", "prop2"],
+              "embodiment": "cloid",
           },
           flags.IllegalFlagValueError,
       ),
@@ -2442,6 +2496,121 @@ class FlywheelCliTest(parameterized.TestCase):
 
       self.assertEqual(flywheel_cli._ARTIFACT_ID.value, "art1")
 
+  def test_strip_whitespace_from_flags_strips_upload_data_robot_id(self):
+    flags.FLAGS["upload_data_robot_id"].value = " robot1 "
+    mock_stdout = io.StringIO()
+    with mock.patch("sys.stdout", mock_stdout):
+      flywheel_cli._strip_whitespace_from_flags()
+
+    self.assertEqual(flywheel_cli._UPLOAD_DATA_ROBOT_ID.value, "robot1")
+
+  def test_strip_whitespace_from_flags_strips_license_path(self):
+    with flagsaver.flagsaver(license_path=" /path/to/license "):
+      mock_stdout = io.StringIO()
+      with mock.patch("sys.stdout", mock_stdout):
+        flywheel_cli._strip_whitespace_from_flags()
+
+      self.assertEqual(
+          flywheel_cli._LICENSE_PATH.value, "/path/to/license"
+      )
+    self.assertIn("WARNING", mock_stdout.getvalue())
+    self.assertIn("license_path", mock_stdout.getvalue())
+
+  def test_strip_whitespace_from_flags_strips_model_checkpoint_path(self):
+    with flagsaver.flagsaver(model_checkpoint_path=" /path/to/model "):
+      mock_stdout = io.StringIO()
+      with mock.patch("sys.stdout", mock_stdout):
+        flywheel_cli._strip_whitespace_from_flags()
+
+      self.assertEqual(
+          flywheel_cli._MODEL_CHECKPOINT_PATH.value, "/path/to/model"
+      )
+    self.assertIn("WARNING", mock_stdout.getvalue())
+    self.assertIn("model_checkpoint_path", mock_stdout.getvalue())
+
+  def test_parse_flag_train_strips_whitespace_e2e(self):
+    """Verifies end-to-end flag parsing and whitespace stripping for train command."""
+    self.service_mock.startTraining.return_value.execute.return_value = {
+        "training_job_id": "test_training_job_id"
+    }
+    req_flags = {
+        "task_id": [" test_task_1 ", " test_task_2 "],
+        "robot_id": [" robot_1 "],
+        "include_tags": [" tag_a "],
+        "exclude_tags": [" tag_b "],
+        "start_date": "20240101",
+        "end_date": "20240102",
+        "training_recipe": "narrow",
+    }
+    mock_stdout = io.StringIO()
+    with flagsaver.flagsaver(**req_flags):
+      with mock.patch("sys.stdout", mock_stdout):
+        self._cli.parse_flag("train")
+
+      call_args = self.service_mock.startTraining.call_args
+      filters = call_args[1]["body"]["training_data_filters"]
+      self.assertEqual(filters["task_id"], ["test_task_1", "test_task_2"])
+      self.assertEqual(filters["robot_id"], ["robot_1"])
+      self.assertEqual(filters["include_tags"], ["tag_a"])
+      self.assertEqual(filters["exclude_tags"], ["tag_b"])
+
+      self.assertEqual(
+          flywheel_cli._TASK_ID.value, ["test_task_1", "test_task_2"]
+      )
+      self.assertEqual(flywheel_cli._ROBOT_ID.value, ["robot_1"])
+      self.assertEqual(flywheel_cli._INCLUDE_TAGS.value, ["tag_a"])
+      self.assertEqual(flywheel_cli._EXCLUDE_TAGS.value, ["tag_b"])
+
+    output = mock_stdout.getvalue()
+    self.assertIn(
+        "WARNING: --task_id contained leading/trailing whitespace.", output
+    )
+    self.assertIn(
+        "WARNING: --robot_id contained leading/trailing whitespace.", output
+    )
+    self.assertIn(
+        "WARNING: --include_tags contained leading/trailing whitespace.", output
+    )
+    self.assertIn(
+        "WARNING: --exclude_tags contained leading/trailing whitespace.", output
+    )
+
+  def test_parse_flag_e2e_strips_upload_data_robot_id(self):
+    mock_stdout = io.StringIO()
+    with mock.patch(
+        "safari_sdk.flywheel.upload_data.upload_data_directory"
+    ) as mock_upload:
+      with flagsaver.flagsaver(
+          upload_data_directory="/tmp/dir",
+      ):
+        flags.FLAGS["upload_data_robot_id"].value = " robot_123 "
+        with mock.patch("sys.stdout", mock_stdout):
+          self._cli.parse_flag("upload_data")
+
+        self.assertEqual(
+            flywheel_cli._UPLOAD_DATA_ROBOT_ID.value, "robot_123"
+        )
+        mock_upload.assert_called_once()
+        self.assertEqual(
+            mock_upload.call_args[1]["robot_id"], "robot_123"
+        )
+
+  def test_parse_flag_e2e_embodiment_non_v2_recipe_raises_error(self):
+    with flagsaver.flagsaver(
+        task_id=["task1"],
+        start_date="20240101",
+        end_date="20240102",
+        training_recipe="gemini_robotics_on_device_v1",
+        proprioception_keys=["prop1"],
+        embodiment="trossen",
+    ):
+      with self.assertRaisesRegex(
+          ValueError,
+          "--embodiment is only supported for the"
+          " gemini_robotics_on_device_v2 recipe.",
+      ):
+        self._cli.parse_flag("train")
+
   def test_data_stats_table_output(self):
     """Covers the table-printing branch in handle_data_stats."""
     mock_stdout = io.StringIO()
@@ -2756,6 +2925,46 @@ class FlywheelCliTest(parameterized.TestCase):
       ):
         self._cli.handle_serve()
 
+  def test_data_stats_mismatched_dates_and_counts(self):
+    mismatch_data = {
+        "taskDates": [
+            {
+                "robotId": "test_robot",
+                "taskId": "test_task",
+                "dates": ["20241201", "20241202"],
+                "dailyCounts": [100],
+            },
+            {
+                "robotId": "test_robot_2",
+                "taskId": "test_task_2",
+                "dates": ["20241201"],
+                "dailyCounts": [200, 300],
+            },
+            {
+                "robotId": "test_robot_3",
+                "taskId": "test_task_3",
+                "dates": None,
+                "dailyCounts": [400],
+            },
+        ],
+    }
+    self.service_mock.trainingDataDetails.return_value.execute.return_value = (
+        mismatch_data
+    )
+    mock_stdout = io.StringIO()
+    with flagsaver.flagsaver(json_output=False):
+      with mock.patch("sys.stdout", mock_stdout):
+        self._cli.handle_data_stats()
+
+    output = mock_stdout.getvalue()
+    self.assertIn("2024-12-01", output)
+    self.assertIn("2024-12-02", output)
+    self.assertIn("None", output)
+    self.assertIn("100", output)
+    self.assertIn("200", output)
+    self.assertIn("300", output)
+    self.assertIn("400", output)
+
 
 class ResolveDownloadPathTest(parameterized.TestCase):
   """Tests for the _resolve_download_path helper function."""
@@ -2950,6 +3159,47 @@ class SafeTarExtractTest(absltest.TestCase):
     ):
       flywheel_cli._safe_tar_extract(mock_tar, self.temp_dir)
 
+  def test_symlink_non_existent_target_allowed(self):
+    mock_tar = mock.Mock()
+    mock_tar.extractall.side_effect = [TypeError, None]
+    mock_member = mock.Mock()
+    mock_member.name = "symlink_file"
+    mock_member.linkname = "non_existent_target.txt"
+    mock_member.issym.return_value = True
+    mock_member.islnk.return_value = False
+    mock_tar.getmembers.return_value = [mock_member]
+
+    flywheel_cli._safe_tar_extract(mock_tar, self.temp_dir)
+    mock_tar.extractall.assert_called_with(path=self.temp_dir)
+
+  def test_symlink_nested_non_existent_dir_relative_allowed(self):
+    mock_tar = mock.Mock()
+    mock_tar.extractall.side_effect = [TypeError, None]
+    mock_member = mock.Mock()
+    mock_member.name = "sub1/sub2/symlink_file"
+    mock_member.linkname = "../../target.txt"
+    mock_member.issym.return_value = True
+    mock_member.islnk.return_value = False
+    mock_tar.getmembers.return_value = [mock_member]
+
+    flywheel_cli._safe_tar_extract(mock_tar, self.temp_dir)
+    mock_tar.extractall.assert_called_with(path=self.temp_dir)
+
+  def test_symlink_nested_non_existent_dir_traversal_blocked(self):
+    mock_tar = mock.Mock()
+    mock_tar.extractall.side_effect = TypeError
+    mock_member = mock.Mock()
+    mock_member.name = "sub1/sub2/symlink_file"
+    mock_member.linkname = "../../../outside.txt"
+    mock_member.issym.return_value = True
+    mock_member.islnk.return_value = False
+    mock_tar.getmembers.return_value = [mock_member]
+
+    with self.assertRaisesRegex(
+        PermissionError, "Blocked link traversal attempt"
+    ):
+      flywheel_cli._safe_tar_extract(mock_tar, self.temp_dir)
+
 
 class DateValidationTest(parameterized.TestCase):
 
@@ -2983,6 +3233,77 @@ class DateValidationTest(parameterized.TestCase):
         flywheel_cli._is_valid_start_end_date_pair(start_date, end_date),
         expected,
     )
+
+
+class HandleHttpErrorTest(parameterized.TestCase):
+
+  @parameterized.named_parameters(
+      (
+          "json_error_dict",
+          mock.Mock(status=400, reason="Bad Request"),
+          (
+              '{"error": {'
+              ' "message": "Invalid param", "status": "INVALID_ARGUMENT"}}'
+          ).encode("utf-8"),
+          "[ERROR] API request failed (HTTP 400 - INVALID_ARGUMENT): "
+          + "Invalid param",
+      ),
+      (
+          "json_error_str",
+          mock.Mock(status=401, reason="Unauthorized"),
+          b'{"error": "Unauthorized key"}',
+          "[ERROR] API request failed (HTTP 401 - Unauthorized): Unauthorized "
+          + "key",
+      ),
+      (
+          "empty_content",
+          mock.Mock(status=500, reason="Internal Server Error"),
+          b"",
+          "[ERROR] API request failed (HTTP 500 - Internal Server Error):",
+      ),
+      (
+          "none_content",
+          mock.Mock(status=500, reason="Internal Server Error"),
+          None,
+          "[ERROR] API request failed (HTTP 500 - Internal Server Error):",
+      ),
+      (
+          "non_json_html_content",
+          mock.Mock(status=502, reason="Bad Gateway"),
+          b"<html>502 Bad Gateway</html>",
+          "[ERROR] API request failed (HTTP 502 - Bad Gateway):",
+      ),
+      (
+          "invalid_utf8_content",
+          mock.Mock(status=500, reason="Server Error"),
+          b"\x80\x81",
+          "[ERROR] API request failed (HTTP 500 - Server Error):",
+      ),
+      (
+          "none_resp",
+          None,
+          b"some content",
+          "[ERROR] API request failed (HTTP Unknown - HTTP Error):",
+      ),
+      (
+          "resp_none_status_reason",
+          mock.Mock(status=None, reason=None),
+          b"",
+          "[ERROR] API request failed (HTTP Unknown - HTTP Error):",
+      ),
+  )
+  def test_handle_http_error(self, resp, content, expected_substring):
+    mock_err = mock.Mock(spec=googleapiclient.errors.HttpError)
+    mock_err.resp = resp
+    mock_err.content = content
+    mock_err.__str__ = mock.Mock(return_value="HttpError message")
+
+    mock_stderr = io.StringIO()
+    with mock.patch("sys.stderr", mock_stderr):
+      flywheel_cli._handle_http_error(mock_err)
+
+    output = mock_stderr.getvalue()
+    self.assertIn(expected_substring, output)
 
 
 if __name__ == "__main__":

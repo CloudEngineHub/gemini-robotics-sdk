@@ -146,7 +146,12 @@ def upload_data_directory(
           file_content_bytes = f.read()
         file_size_mb = len(file_content_bytes) / (1024 * 1024)
 
-        _check_session_size(file_content_bytes)
+        try:
+          _check_session_size(file_content_bytes)
+        except ValueError as e:
+          failed_count += 1
+          print(f'Failed to upload {file} ({file_size_mb:.2f} MB): {e}')
+          continue
 
         t_start = time.time()
         status_code, reason = _upload_file(
