@@ -58,7 +58,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
               step_type=gdmr_types.STEP_TYPE_SPEC,
               reward={},
               discount={},
-              observation={
+              observation={  # pyrefly: ignore[bad-argument-type]
                   "test_camera_1": specs.Array(
                       shape=(100, 100, 3), dtype=np.uint8
                   ),
@@ -76,7 +76,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
               step_type=gdmr_types.STEP_TYPE_SPEC,
               reward={},
               discount={},
-              observation={
+              observation={  # pyrefly: ignore[bad-argument-type]
                   "test_camera_1": specs.Array(
                       shape=(100, 100, 3), dtype=np.uint8
                   ),
@@ -92,7 +92,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
               step_type=gdmr_types.STEP_TYPE_SPEC,
               reward={},
               discount={},
-              observation={
+              observation={  # pyrefly: ignore[bad-argument-type]
                   "test_camera_1": specs.Array(
                       shape=(100, 100, 3), dtype=np.uint8
                   ),
@@ -150,7 +150,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -212,7 +212,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -223,13 +223,13 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     (_, extra_spec_2), _ = policy_2.step_spec(timestep_spec)
 
     # Verify each policy took on the shape of its respective model
-    self.assertEqual(extra_spec_1["action_chunk"].shape, (3, 2))
-    self.assertEqual(extra_spec_2["action_chunk"].shape, (5, 4))
+    self.assertEqual(extra_spec_1["action_chunk"].shape, (3, 2))  # pyrefly: ignore[bad-index, missing-attribute]
+    self.assertEqual(extra_spec_2["action_chunk"].shape, (5, 4))  # pyrefly: ignore[bad-index, missing-attribute]
 
     # Prove dictionaries are isolated and not leaking into one another
     self.assertNotEqual(
-        extra_spec_1["action_chunk"].shape,
-        extra_spec_2["action_chunk"].shape,
+        extra_spec_1["action_chunk"].shape,  # pyrefly: ignore[bad-index]
+        extra_spec_2["action_chunk"].shape,  # pyrefly: ignore[bad-index]
     )
 
   def test_step_spec_with_float64_dtype(self):
@@ -253,7 +253,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -302,7 +302,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -313,14 +313,14 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
 
     timestep_spec_after_call = policy._timestep_spec
     self.assertIsNotNone(timestep_spec_after_call)
-    self.assertIn("additional_obs_1", timestep_spec_after_call.observation)
+    self.assertIn("additional_obs_1", timestep_spec_after_call.observation)  # pyrefly: ignore[bad-argument-type]
     self.assertEqual(
-        timestep_spec_after_call.observation["additional_obs_1"],
+        timestep_spec_after_call.observation["additional_obs_1"],  # pyrefly: ignore[bad-index]
         specs.Array(shape=(1,), dtype=np.float32),
     )
-    self.assertIn("additional_obs_2", timestep_spec_after_call.observation)
+    self.assertIn("additional_obs_2", timestep_spec_after_call.observation)  # pyrefly: ignore[bad-argument-type]
     self.assertEqual(
-        timestep_spec_after_call.observation["additional_obs_2"],
+        timestep_spec_after_call.observation["additional_obs_2"],  # pyrefly: ignore[bad-index]
         specs.StringArray(shape=()),
     )
 
@@ -363,7 +363,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -445,7 +445,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -480,17 +480,17 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     # Verify extra contains latency data (sentinel values since mock doesn't
     # set them)
     self.assertIn("inference_total_ms", extra)
-    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)
+    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)  # pyrefly: ignore[bad-index, no-matching-overload]
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(1, dtype=np.uint8)
+        extra["inference_sent"], np.array(1, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
     model_interface.query_model.reset_mock()
 
@@ -503,18 +503,18 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     model_interface.query_model.assert_not_called()
     # Verify extra contains sentinel values on non-inference step
     np.testing.assert_equal(
-        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)
+        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(0, dtype=np.uint8)
+        extra["inference_sent"], np.array(0, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(1, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(1, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
     # Third step, should not trigger a query.
     (action, extra), policy_state = policy.step(
@@ -525,18 +525,18 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     model_interface.query_model.assert_not_called()
     # Verify extra contains sentinel values on non-inference step
     np.testing.assert_equal(
-        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)
+        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(0, dtype=np.uint8)
+        extra["inference_sent"], np.array(0, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(0, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(0, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
     # Fourth step, should trigger a query.
     (action, extra), unused_policy_state = policy.step(
@@ -545,17 +545,17 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     )
     np.testing.assert_equal(action, [1.0])
     model_interface.query_model.assert_called_once()
-    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)
+    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)  # pyrefly: ignore[bad-index, no-matching-overload]
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(1, dtype=np.uint8)
+        extra["inference_sent"], np.array(1, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
   def test_step_async_policy(self):
     model_interface = mock.create_autospec(model_interface_lib.ModelInterface)
@@ -577,7 +577,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -612,17 +612,17 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     np.testing.assert_equal(action, [1.0])
     # Verify extra contains latency data
     self.assertIn("inference_total_ms", extra)
-    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)
+    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)  # pyrefly: ignore[bad-index, no-matching-overload]
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(1, dtype=np.uint8)
+        extra["inference_sent"], np.array(1, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))  # pyrefly: ignore[bad-index]
     model_interface.query_model.reset_mock()
 
     # Second step, should not trigger a query.
@@ -634,18 +634,18 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     model_interface.query_model.assert_not_called()
     # Verify extra contains sentinel values on non-inference step
     np.testing.assert_equal(
-        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)
+        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(0, dtype=np.uint8)
+        extra["inference_sent"], np.array(0, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(1, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(1, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
     # Third step, should not trigger a query.
     (action, extra), policy_state = policy.step(
@@ -655,18 +655,18 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     np.testing.assert_equal(action, [3.0])
     model_interface.query_model.assert_not_called()
     np.testing.assert_equal(
-        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)
+        extra["inference_total_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(0, dtype=np.uint8)
+        extra["inference_sent"], np.array(0, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(0, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(0, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
     # Fourth step, should trigger a query.
     (action, extra), unused_policy_state = policy.step(
@@ -675,17 +675,17 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     )
     np.testing.assert_equal(action, [1.0])
     model_interface.query_model.assert_called_once()
-    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)
+    self.assertGreaterEqual(extra["inference_total_ms"], 0.0)  # pyrefly: ignore[bad-index, no-matching-overload]
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(-1.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(1, dtype=np.uint8)
+        extra["inference_sent"], np.array(1, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(2, dtype=np.int32))  # pyrefly: ignore[bad-index]
 
   def test_async_policy_increases_action_stall_count(self):
     model_interface = mock.create_autospec(model_interface_lib.ModelInterface)
@@ -707,7 +707,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -762,7 +762,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -856,7 +856,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -943,6 +943,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     )
     model_interface.last_remote_inference_time_ms = 100.0
     model_interface.last_network_overhead_ms = 50.0
+    model_interface.last_wire_transit_ms = 15.0
+    model_interface.last_client_processing_ms = 35.0
+    model_interface.last_client_image_encode_ms = 20.0
 
     policy = gemini_robotics_policy.GeminiRoboticsPolicy(
         serve_id="test_serve_id",
@@ -960,7 +963,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -981,10 +984,19 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     )
 
     np.testing.assert_equal(
-        extra["remote_inference_ms"], np.array(100.0, dtype=np.float32)
+        extra["remote_inference_ms"], np.array(100.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
     np.testing.assert_equal(
-        extra["network_overhead_ms"], np.array(50.0, dtype=np.float32)
+        extra["network_overhead_ms"], np.array(50.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
+    )
+    np.testing.assert_equal(
+        extra["client_wire_transit_ms"], np.array(15.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
+    )
+    np.testing.assert_equal(
+        extra["client_processing_ms"], np.array(35.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
+    )
+    np.testing.assert_equal(
+        extra["client_image_encode_ms"], np.array(20.0, dtype=np.float32)  # pyrefly: ignore[bad-index]
     )
 
   def test_model_action_not_2d_raises_error(self):
@@ -1006,7 +1018,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -1053,7 +1065,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -1107,9 +1119,9 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
     # Action is the first element of the buffer: [2].
     np.testing.assert_equal(action, [2.0])
     np.testing.assert_equal(
-        extra["inference_sent"], np.array(1, dtype=np.uint8)
+        extra["inference_sent"], np.array(1, dtype=np.uint8)  # pyrefly: ignore[bad-index]
     )
-    np.testing.assert_equal(extra["actions_left"], np.array(3, dtype=np.int32))
+    np.testing.assert_equal(extra["actions_left"], np.array(3, dtype=np.int32))  # pyrefly: ignore[bad-index]
     # Wait for async execution by checking the future.
     # The policy should have submitted a future.
     self.assertIsNotNone(policy._future)
@@ -1166,7 +1178,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -1225,7 +1237,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -1281,7 +1293,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),
@@ -1338,7 +1350,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
           step_type=gdmr_types.STEP_TYPE_SPEC,
           reward={},
           discount={},
-          observation={
+          observation={  # pyrefly: ignore[bad-argument-type]
               "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
               "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
               "test_instruction_key": specs.StringArray(()),
@@ -1376,7 +1388,7 @@ class GeminiRoboticsPolicyTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward={},
         discount={},
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "test_camera_1": specs.Array(shape=(100, 100, 3), dtype=np.uint8),
             "test_joint_1": specs.Array(shape=(1,), dtype=np.float32),
             "test_instruction_key": specs.StringArray(()),

@@ -19,6 +19,9 @@ import queue
 import threading
 import time
 
+from absl import logging
+
+from google.protobuf import struct_pb2
 from google.protobuf import message as message_lib
 from safari_sdk.logging.python import constants
 from safari_sdk.logging.python import file_handler
@@ -65,7 +68,7 @@ class BaseLogger:
 
     self._agent_id: str = agent_id
     self._session_started: bool = False
-    self._session: metadata_pb2.Session = None
+    self._session: metadata_pb2.Session = None  # pyrefly: ignore[bad-assignment]
     # If True, data outside of sessions will be logged to the same file too.
     self._log_outside_session: bool = False
     self._is_recording: bool = False
@@ -285,6 +288,30 @@ class BaseLogger:
       )
     self._session.labels.append(label)
 
+  def add_setup_config(self, config_id: str, config: struct_pb2.Value) -> None:
+    """Adds or overwrites a setup configuration to the current session.
+
+    Args:
+      config_id: A unique identifier for the configuration.
+      config: The configuration data as a `struct_pb2.Value`.
+    """
+    if not self._session_started:
+      raise ValueError(
+          f'add_setup_config(config_id={config_id!r}) called before session has'
+          ' been started.'
+      )
+    if config_id in self._session.setup_configs:
+      logging.warning(
+          (
+              'Setup config with id %s already exists, overwriting. Overwrote'
+              ' content:\n%s\nwith content:\n%s'
+          ),
+          config_id,
+          self._session.setup_configs[config_id],
+          config,
+      )
+    self._session.setup_configs[config_id].CopyFrom(config)
+
   def start_outside_session_logging(
       self,
       start_nsec: int,
@@ -329,7 +356,7 @@ class BaseLogger:
     if self._session_started:
       raise ValueError(
           'stop_outside_session_logging_and_finalize_file() should not be'
-          ' called while recording a sesison.'
+          ' called while recording a session.'
       )
     if self._log_outside_session:
       self._log_outside_session = False
@@ -389,7 +416,7 @@ class BaseLogger:
     """
     current_thread = self._log_writer_thread
     if current_thread and current_thread.is_alive():
-      self._message_queue.put(_SENTINEL)
+      self._message_queue.put(_SENTINEL)  # pyrefly: ignore[bad-argument-type]
       current_thread.join(timeout=2 * 60)  # Wait for thread to finish
     recorded_exception = self._worker_exception
     self._log_writer_thread = None

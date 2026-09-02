@@ -721,7 +721,7 @@ class AgentEvaluator:
 
     self._orchestrator_client.start_work_unit_execution()
     self._agent_session_id = self._get_agent_session_id_from_agent_backend()
-    self._set_agent_session_id_on_robot_backend(self._agent_session_id)
+    self._set_agent_session_id_on_robot_backend(self._agent_session_id)  # pyrefly: ignore[bad-argument-type]
     if agent_instruction:
       self._send_instruction_to_agent_backend(agent_instruction)
     if operator_instruction:

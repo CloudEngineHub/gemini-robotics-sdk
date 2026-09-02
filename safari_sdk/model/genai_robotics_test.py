@@ -134,6 +134,8 @@ class GenaiRoboticsTest(parameterized.TestCase):
       self.assertEqual(query["joints_pos"], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
       self.assertEqual(response.backend_request_time, "2024-05-01T12:00:00Z")
       self.assertEqual(response.backend_response_time, "2024-05-01T12:00:01Z")
+      self.assertGreaterEqual(response.client_image_encode_ms, 0.0)
+      self.assertGreaterEqual(response.client_rpc_ms, 0.0)
 
   def test_robotics_api_generate_content_msgpack(self):
     """Tests the msgpack protocol (server_version >= 2.0.0 / grodv2)."""
@@ -175,6 +177,8 @@ class GenaiRoboticsTest(parameterized.TestCase):
           ],
       )
       self.assertEqual(response.text, json.dumps(expected_output))
+      self.assertGreaterEqual(response.client_image_encode_ms, 0.0)
+      self.assertGreaterEqual(response.client_rpc_ms, 0.0)
       mock_cm_custom.assert_called_once()
       call_body = mock_cm_custom.call_args.kwargs["body"]
       # Msgpack path uses msgpack encoding.

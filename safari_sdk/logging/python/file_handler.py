@@ -62,7 +62,7 @@ class FileHandler:
     # Invariant during operation on a particular file shard.
     self._shard: int = 0
     self._file_handle = None
-    self._mcap_writer: mcap_protobuf_writer.Writer = None
+    self._mcap_writer: mcap_protobuf_writer.Writer = None  # pyrefly: ignore[bad-assignment]
 
     # Variable with each write_message call.
     self._file_shard_bytes: int = 0

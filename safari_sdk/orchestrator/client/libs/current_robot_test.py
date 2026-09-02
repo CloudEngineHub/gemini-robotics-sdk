@@ -61,7 +61,7 @@ class CurrentRobotTest(absltest.TestCase):
     self.assertTrue(response.is_operational)
     self.assertLen(response.latest_robot_release_configs, 1)
     self.assertEqual(
-        response.latest_robot_release_configs[0].key, "test_key"
+        response.latest_robot_release_configs[0].key, "test_key"  # pyrefly: ignore[unsupported-operation]
     )
 
     mock_connection.orchestrator().currentRobotInfo().execute.return_value = {

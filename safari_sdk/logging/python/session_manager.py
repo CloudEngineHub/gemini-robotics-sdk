@@ -15,6 +15,10 @@
 """SessionManager class for managing the lifecycle of a session."""
 
 from collections.abc import Set
+
+from absl import logging
+
+from google.protobuf import struct_pb2
 from safari_sdk.logging.python import session_metadata as session_metadata_lib
 from safari_sdk.protos import label_pb2
 from safari_sdk.protos.logging import metadata_pb2
@@ -136,6 +140,34 @@ class SessionManager:
           'add_session_label is called before session has been started.'
       )
     self._session.labels.append(label)
+
+  def add_setup_config(self, config_id: str, config: struct_pb2.Value) -> None:
+    """Adds a setup config to the session.
+
+    Args:
+      config_id: The config ID of the setup config.
+      config: The setup config to be added to the session. This will be added to
+        the session aspects.
+
+    Raises:
+      ValueError: If the session has not been started.
+    """
+    if not self._session_started or self._session is None:
+      raise ValueError(
+          f'add_setup_config(config_id={config_id!r}) called before session has'
+          ' been started.'
+      )
+    if config_id in self._session.setup_configs:
+      logging.warning(
+          (
+              'Setup config with id %s already exists, overwriting. Overwrote'
+              ' content:\n%s\nwith content:\n%s'
+          ),
+          config_id,
+          self._session.setup_configs[config_id],
+          config,
+      )
+    self._session.setup_configs[config_id].CopyFrom(config)
 
   def stop_session(self, stop_timestamp_nsec: int) -> metadata_pb2.Session:
     """Stops the current session and updates the session metadata.

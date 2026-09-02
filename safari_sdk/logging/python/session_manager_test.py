@@ -22,6 +22,7 @@ from safari_sdk.logging.python import session_manager
 from safari_sdk.logging.python import session_metadata as session_metadata_lib
 from safari_sdk.protos import label_pb2
 from safari_sdk.protos.logging import codec_pb2
+from safari_sdk.protos.logging import constants_pb2
 from safari_sdk.protos.logging import dtype_pb2
 from safari_sdk.protos.logging import orchestrator_info_pb2
 from safari_sdk.protos.logging import policy_type_pb2
@@ -136,6 +137,72 @@ class SessionManagerTest(absltest.TestCase):
     self.assertLen(manager._session.labels, 2)
     self.assertEqual(manager._session.labels[0], label1)
     self.assertEqual(manager._session.labels[1], label2)
+
+  def test_add_setup_config(self):
+    manager = session_manager.SessionManager(
+        topics={"topic1", "topic2"},
+        required_topics={"topic1"},
+        policy_environment_metadata_params=self._policy_environment_metadata_params,
+    )
+    manager.start_session(start_timestamp_nsec=123, task_id=_TEST_TASK_ID)
+    config1 = struct_pb2.Value(string_value="value1")
+    config2 = struct_pb2.Value(string_value="value2")
+    manager.add_setup_config("config1", config1)
+    manager.add_setup_config("config2", config2)
+    self.assertLen(manager._session.setup_configs, 2)
+    self.assertEqual(manager._session.setup_configs["config1"], config1)
+    self.assertEqual(manager._session.setup_configs["config2"], config2)
+
+  def test_add_setup_config_before_start_raises_error(self):
+    manager = session_manager.SessionManager(
+        topics={"topic1", "topic2"},
+        required_topics={"topic1"},
+        policy_environment_metadata_params=self._policy_environment_metadata_params,
+    )
+    config = struct_pb2.Value(string_value="value1")
+    with self.assertRaisesRegex(
+        ValueError,
+        "add_setup_config.*called before session has been started",
+    ):
+      manager.add_setup_config("config1", config)
+
+  def test_add_setup_config_overwrites_existing_config(self):
+    manager = session_manager.SessionManager(
+        topics={"topic1", "topic2"},
+        required_topics={"topic1"},
+        policy_environment_metadata_params=self._policy_environment_metadata_params,
+    )
+    manager.start_session(start_timestamp_nsec=123, task_id=_TEST_TASK_ID)
+    config1 = struct_pb2.Value(string_value="value1")
+    config2 = struct_pb2.Value(string_value="value2")
+    manager.add_setup_config("config1", config1)
+    manager.add_setup_config("config1", config2)
+    self.assertLen(manager._session.setup_configs, 1)
+    self.assertEqual(manager._session.setup_configs["config1"], config2)
+
+  def test_add_setup_config_with_enum_config_id(self):
+    manager = session_manager.SessionManager(
+        topics={"topic1", "topic2"},
+        required_topics={"topic1"},
+        policy_environment_metadata_params=self._policy_environment_metadata_params,
+    )
+    manager.start_session(start_timestamp_nsec=123, task_id=_TEST_TASK_ID)
+    config = struct_pb2.Value(string_value="value1")
+    manager.add_setup_config(
+        constants_pb2.SetupConfig.Name(
+            constants_pb2.SetupConfig.SETUP_CONFIG_EXTERNAL_CAMERA_NAMES
+        ),
+        config,
+    )
+    self.assertLen(manager._session.setup_configs, 1)
+    self.assertEqual(
+        manager._session.setup_configs[
+            constants_pb2.SetupConfig.Name(
+                constants_pb2.SetupConfig.SETUP_CONFIG_EXTERNAL_CAMERA_NAMES
+            )
+        ],
+        config,
+    )
 
   def test_add_session_label_before_start_raises_error(self):
     manager = session_manager.SessionManager(

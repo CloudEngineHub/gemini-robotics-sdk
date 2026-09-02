@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 from typing import Any, cast
+import unittest
 from unittest import mock
 
 import cv2
@@ -28,12 +29,14 @@ from gdm_robotics.interfaces import types as gdmr_types
 from gdm_robotics.testing import specs_utils
 import numpy as np
 
+from google.protobuf import struct_pb2
 from absl.testing import absltest
 from absl.testing import parameterized
+from safari_sdk.logging.cc.python import log_writer
 from safari_sdk.logging.python import constants
 from safari_sdk.logging.python import mcap_parser_utils
 from safari_sdk.logging.python import episodic_logger
-from safari_sdk.logging.python import session_manager
+from safari_sdk.logging.python import session_manager as session_manager_lib
 from safari_sdk.logging.python import session_metadata as session_metadata_lib
 
 _TEST_AGENT_ID = "fake_agent_id_for_test"
@@ -54,7 +57,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -107,7 +110,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -121,7 +124,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     with mock.patch.object(
-        session_manager, "SessionManager", autospec=True
+        session_manager_lib, "SessionManager", autospec=True
     ) as mock_session_manager:
       episodic_logger.EpisodicLogger.create(
           episodic_logger.EpisodicLoggerConfig(
@@ -159,7 +162,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -173,7 +176,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     )
 
     mock_session_manager = self.enter_context(
-        mock.patch.object(session_manager, "SessionManager", autospec=True)
+        mock.patch.object(session_manager_lib, "SessionManager", autospec=True)
     )
     episodic_logger.EpisodicLogger.create(
         episodic_logger.EpisodicLoggerConfig(
@@ -214,7 +217,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -314,17 +317,17 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
       else:
-        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     expected_policy_extras = [{}] * (_DEFAULT_NUMBER_STEPS + 2)
     self.assertEqual(policy_extras, expected_policy_extras)
@@ -334,7 +337,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
             "feature3": specs.Array(shape=(), dtype=np.float64),
@@ -413,7 +416,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
             "feature3": specs.Array(shape=(), dtype=np.float64),
@@ -522,7 +525,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float64),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -616,12 +619,12 @@ class EpisodicLoggerTest(parameterized.TestCase):
   def test_reward_is_dict(self):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
-        reward={
+        reward={  # pyrefly: ignore[bad-argument-type]
             "reward1": specs.Array(shape=(), dtype=np.int32),
             "reward2": specs.Array(shape=(3,), dtype=np.float32),
         },
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -713,7 +716,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -808,11 +811,11 @@ class EpisodicLoggerTest(parameterized.TestCase):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
-        discount={
+        discount={  # pyrefly: ignore[bad-argument-type]
             "discount1": specs.Array(shape=(), dtype=np.int32),
             "discount2": specs.Array(shape=(3,), dtype=np.float32),
         },
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -904,7 +907,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -954,7 +957,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
       )
       # Override the discount to be a scalar.
       next_timestep = next_timestep._replace(discount=np.float32(1.0))
-      action = specs_utils.valid_value_for_spec(action_spec)
+      action = specs_utils.valid_value_for_spec(action_spec)  # pyrefly: ignore[bad-argument-type]
 
       expected_actions.append(action)
 
@@ -964,7 +967,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
       )
 
     last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
-    last_action = specs_utils.valid_value_for_spec(action_spec)
+    last_action = specs_utils.valid_value_for_spec(action_spec)  # pyrefly: ignore[bad-argument-type]
 
     expected_actions.append(last_action)
 
@@ -1008,13 +1011,13 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
 
@@ -1023,7 +1026,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -1051,7 +1054,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
         )
     )
 
@@ -1070,25 +1073,25 @@ class EpisodicLoggerTest(parameterized.TestCase):
           timestep_spec, dm_env.StepType.MID
       )
       action = specs_utils.valid_value_for_spec(action_spec)
-      policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)
+      policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)  # pyrefly: ignore[bad-argument-type]
 
       expected_timesteps.append(next_timestep)
       expected_actions.append(action)
       expected_policy_extras.append(policy_extra)
 
       logger.record_action_and_next_timestep(
-          action=action, next_timestep=next_timestep, policy_extra=policy_extra
+          action=action, next_timestep=next_timestep, policy_extra=policy_extra  # pyrefly: ignore[bad-argument-type]
       )
 
     last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
     expected_timesteps.append(last_timestep)
     action = action_spec.generate_value()
-    policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)
+    policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)  # pyrefly: ignore[bad-argument-type]
 
     logger.record_action_and_next_timestep(
         action=action,
         next_timestep=last_timestep,
-        policy_extra=policy_extra,
+        policy_extra=policy_extra,  # pyrefly: ignore[bad-argument-type]
     )
     expected_actions.append(action)
     expected_policy_extras.append(policy_extra)
@@ -1114,7 +1117,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         mcap_parser_utils.parse_examples_to_dm_env_types(
             timestep_spec,
             action_spec,
-            policy_extra_spec,
+            policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             timesteps_examples,
             actions_examples,
             policy_extras_examples,
@@ -1132,20 +1135,20 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
       else:
-        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     for idx, _ in enumerate(policy_extras):
-      keys = policy_extras[idx].keys()
+      keys = policy_extras[idx].keys()  # pyrefly: ignore[missing-attribute]
       expected_policy_extras_keys = cast(
           Mapping[str, Any], expected_policy_extras[idx]
       ).keys()
@@ -1164,19 +1167,19 @@ class EpisodicLoggerTest(parameterized.TestCase):
   def test_string_values_are_written_correctly(self, string_type):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
-        reward={
+        reward={  # pyrefly: ignore[bad-argument-type]
             "num_reward": specs.Array(shape=(), dtype=np.float32),
             "string_reward": specs.StringArray(
                 shape=(), string_type=string_type
             ),
         },
-        discount={
+        discount={  # pyrefly: ignore[bad-argument-type]
             "num_discount": specs.Array(shape=(), dtype=np.float32),
             "string_discount": specs.StringArray(
                 shape=(), string_type=string_type
             ),
         },
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(
                 shape=(), name="instruction", string_type=string_type
             ),
@@ -1212,7 +1215,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=[_TEST_PROPRIO_KEY],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
         )
     )
 
@@ -1231,7 +1234,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
           timestep_spec, dm_env.StepType.MID
       )
       action = specs_utils.valid_value_for_spec(action_spec)
-      policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)
+      policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)  # pyrefly: ignore[bad-argument-type]
 
       expected_timesteps.append(next_timestep)
       expected_actions.append(action)
@@ -1240,12 +1243,12 @@ class EpisodicLoggerTest(parameterized.TestCase):
       logger.record_action_and_next_timestep(
           action=action,
           next_timestep=next_timestep,
-          policy_extra=policy_extra,
+          policy_extra=policy_extra,  # pyrefly: ignore[bad-argument-type]
       )
 
     last_timestep = self._generate_timestep(timestep_spec, dm_env.StepType.LAST)
     action = specs_utils.valid_value_for_spec(action_spec)
-    policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)
+    policy_extra = specs_utils.valid_value_for_spec(policy_extra_spec)  # pyrefly: ignore[bad-argument-type]
 
     expected_timesteps.append(last_timestep)
     expected_actions.append(action)
@@ -1254,7 +1257,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
     logger.record_action_and_next_timestep(
         action=action,
         next_timestep=last_timestep,
-        policy_extra=policy_extra,
+        policy_extra=policy_extra,  # pyrefly: ignore[bad-argument-type]
     )
 
     logger.write()
@@ -1279,7 +1282,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         mcap_parser_utils.parse_examples_to_dm_env_types(
             timestep_spec,
             action_spec,
-            policy_extra_spec,
+            policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             timesteps_examples,
             actions_examples,
             policy_extras_examples,
@@ -1354,10 +1357,10 @@ class EpisodicLoggerTest(parameterized.TestCase):
           )
 
     for idx, _ in enumerate(actions):
-      np.testing.assert_allclose(actions[idx], expected_actions[idx])
+      np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     for idx, _ in enumerate(policy_extras):
-      keys = policy_extras[idx].keys()
+      keys = policy_extras[idx].keys()  # pyrefly: ignore[missing-attribute]
       expected_policy_extras_keys = cast(
           Mapping[str, Any], expected_policy_extras[idx]
       ).keys()
@@ -1462,7 +1465,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
   def test_logger_validates_data(
       self,
       timestep: dm_env.TimeStep,
-      action: gdmr_types.ActionType,
+      action: gdmr_types.ActionType,  # pyrefly: ignore[invalid-type-var]
       policy_extra: Mapping[str, Any],
       expected_error_message: str,
   ):
@@ -1470,7 +1473,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -1496,7 +1499,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=["feature1"],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
         )
     )
 
@@ -1541,13 +1544,13 @@ class EpisodicLoggerTest(parameterized.TestCase):
       ),
   )
   def test_validates_action_spec(
-      self, action_spec: gdmr_types.ActionSpec, expected_error_message: str
+      self, action_spec: gdmr_types.ActionSpec, expected_error_message: str  # pyrefly: ignore[invalid-type-var]
   ):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -1566,7 +1569,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
               timestep_spec=timestep_spec,
               image_observation_keys=[],
               proprioceptive_observation_keys=["feature1"],
-              policy_extra_spec=policy_extra_spec,
+              policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
           )
       )
 
@@ -1647,14 +1650,14 @@ class EpisodicLoggerTest(parameterized.TestCase):
   def test_disabling_validation_does_not_raise_error(
       self,
       timestep: dm_env.TimeStep,
-      action: gdmr_types.ActionType,
+      action: gdmr_types.ActionType,  # pyrefly: ignore[invalid-type-var]
       policy_extra: Mapping[str, Any],
   ):
     timestep_spec = gdmr_types.TimeStepSpec(
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -1683,7 +1686,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=["feature1"],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             validate_data_with_spec=False,
         )
     )
@@ -1711,7 +1714,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -1794,7 +1797,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -1946,17 +1949,17 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
       else:
-        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     expected_policy_extras = [{}] * (_DEFAULT_NUMBER_STEPS + 2)
     self.assertEqual(policy_extras, expected_policy_extras)
@@ -1966,7 +1969,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2039,7 +2042,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2066,7 +2069,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=["feature1"],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             file_shard_size_limit_bytes=50,
         )
     )
@@ -2114,7 +2117,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2141,7 +2144,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=["feature1"],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             file_shard_size_limit_bytes=50,
         )
     )
@@ -2209,7 +2212,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         mcap_parser_utils.parse_examples_to_dm_env_types(
             timestep_spec,
             action_spec,
-            policy_extra_spec,
+            policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             timesteps_examples,
             actions_examples,
             policy_extras_examples,
@@ -2227,20 +2230,20 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
       else:
-        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     for idx, _ in enumerate(policy_extras):
-      keys = policy_extras[idx].keys()
+      keys = policy_extras[idx].keys()  # pyrefly: ignore[missing-attribute]
       expected_policy_extras_keys = cast(
           Mapping[str, Any], expected_policy_extras[idx]
       ).keys()
@@ -2256,7 +2259,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float64),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -2333,7 +2336,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2360,7 +2363,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
             timestep_spec=timestep_spec,
             image_observation_keys=[],
             proprioceptive_observation_keys=["feature1"],
-            policy_extra_spec=policy_extra_spec,
+            policy_extra_spec=policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
         )
     )
     logger.write()
@@ -2400,7 +2403,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2428,7 +2431,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "rgb_camera": specs.Array(shape=(64, 64, 3), dtype=np.uint8),
             "depth_camera": specs.Array(shape=(64, 64), dtype=np.uint16),
@@ -2501,7 +2504,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "some_other_feature": specs.Array(shape=(4,), dtype=np.float32),
             # The _TEST_PROPRIO_KEY or any specific invalid key is missing here.
@@ -2536,7 +2539,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             proprio_key_to_test: {
                 "sub_field": specs.Array(shape=(1,), dtype=np.float32)
@@ -2571,7 +2574,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             # 'instruction' key is missing here.
             "some_other_feature": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -2602,7 +2605,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -2706,17 +2709,17 @@ class EpisodicLoggerTest(parameterized.TestCase):
 
     for idx, _ in enumerate(actions):
       if isinstance(actions[idx], Mapping):
-        keys = actions[idx].keys()
+        keys = actions[idx].keys()  # pyrefly: ignore[missing-attribute]
         expected_actions_keys = cast(
             Mapping[str, np.ndarray], expected_actions[idx]
         ).keys()
         self.assertSameElements(keys, expected_actions_keys)
         for key in keys:
-          np.testing.assert_allclose(
+          np.testing.assert_allclose(  # pyrefly: ignore[no-matching-overload]
               actions[idx][key], expected_actions[idx][key]
           )
       else:
-        np.testing.assert_allclose(actions[idx], expected_actions[idx])
+        np.testing.assert_allclose(actions[idx], expected_actions[idx])  # pyrefly: ignore[no-matching-overload]
 
     expected_policy_extras = [{}] * (_DEFAULT_NUMBER_STEPS + 2)
     self.assertEqual(policy_extras, expected_policy_extras)
@@ -2727,7 +2730,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -2764,7 +2767,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -2818,7 +2821,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
@@ -2922,7 +2925,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "feature2": specs.Array(shape=(3,), dtype=np.int32),
             "feature3": specs.Array(shape=(), dtype=np.float64),
@@ -2995,7 +2998,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "instruction": specs.StringArray(shape=(), name="instruction"),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -3057,7 +3060,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             "instruction": specs.StringArray(shape=(), name="instruction"),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -3117,7 +3120,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=np.asarray(step_type, dtype=np.uint8),
         reward=specs_utils.valid_value_for_spec(timestep_spec.reward),
         discount=specs_utils.valid_value_for_spec(timestep_spec.discount),
-        observation=specs_utils.valid_dict_value(timestep_spec.observation),
+        observation=specs_utils.valid_dict_value(timestep_spec.observation),  # pyrefly: ignore[bad-argument-type]
     )
 
   def _assert_timestep_is_close(
@@ -3186,7 +3189,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
         },
@@ -3252,7 +3255,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float64),
         discount=specs.Array(shape=(), dtype=np.float64),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "feature1": specs.Array(shape=(4,), dtype=np.float32),
             _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
@@ -3441,7 +3444,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
         step_type=gdmr_types.STEP_TYPE_SPEC,
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={
+        observation={  # pyrefly: ignore[bad-argument-type]
             "instruction": specs.StringArray(shape=(), name="instruction"),
             "cam": specs.Array(
                 shape=(image_height, image_width, 3), dtype=np.uint8
@@ -3485,7 +3488,7 @@ class EpisodicLoggerTest(parameterized.TestCase):
               "instruction": "test_instruction",
               "cam": test_image.copy(),
               _TEST_PROPRIO_KEY: specs_utils.valid_value_for_spec(
-                  timestep_spec.observation[_TEST_PROPRIO_KEY]
+                  timestep_spec.observation[_TEST_PROPRIO_KEY]  # pyrefly: ignore[bad-argument-type, bad-index]
               ),
           },
       )
@@ -3588,7 +3591,7 @@ class EpisodicLoggerConfigSanitizationTest(parameterized.TestCase):
             step_type=gdmr_types.STEP_TYPE_SPEC,
             reward=specs.Array(shape=(), dtype=np.float32),
             discount=specs.Array(shape=(), dtype=np.float32),
-            observation={
+            observation={  # pyrefly: ignore[bad-argument-type]
                 "instruction": specs.StringArray(shape=(), name="instruction"),
             },
         ),
@@ -3614,7 +3617,7 @@ class EpisodicLoggerConfigSanitizationTest(parameterized.TestCase):
             step_type=gdmr_types.STEP_TYPE_SPEC,
             reward=specs.Array(shape=(), dtype=np.float32),
             discount=specs.Array(shape=(), dtype=np.float32),
-            observation={
+            observation={  # pyrefly: ignore[bad-argument-type]
                 "instruction": specs.StringArray(shape=(), name="instruction"),
             },
         ),
@@ -3630,6 +3633,148 @@ class EpisodicLoggerConfigSanitizationTest(parameterized.TestCase):
     logger.set_task_id(" new_task ")
     self.assertEqual(logger._task_id, "new_task")
     logger.stop()
+
+
+class EpisodicLoggerMockTest(unittest.TestCase):
+
+  @mock.patch.object(session_manager_lib, "SessionManager", autospec=True)
+  @mock.patch.object(log_writer, "create_log_writer", autospec=True)
+  @mock.patch.object(
+      episodic_logger,
+      "_validate_metadata",
+      autospec=True,
+  )
+  def test_setup_configs_passed_to_session_manager(
+      self,
+      mock_validate_metadata,
+      mock_create_log_writer,
+      mock_session_manager_cls,
+  ):
+    """Tests if setup_configs are correctly passed to add_setup_config."""
+    mock_session_manager = mock_session_manager_cls.return_value
+    mock_writer = mock_create_log_writer.return_value
+
+    setup_configs = {
+        "robot_config": struct_pb2.Value(string_value="panda_v1"),
+        "environment_settings": struct_pb2.Value(number_value=2.5),
+        "calibration_data": struct_pb2.Value(bool_value=True),
+    }
+
+    dummy_spec = mock.MagicMock()
+    mock_timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={  # pyrefly: ignore[bad-argument-type]
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+    mock_action_spec = dummy_spec
+    mock_policy_extra_spec = {"extra": dummy_spec}
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id="test_agent",
+            task_id="test_task",
+            output_directory="/tmp/logs",
+            image_observation_keys=[],
+            proprioceptive_observation_keys=[],
+            timestep_spec=mock_timestep_spec,
+            action_spec=mock_action_spec,
+            policy_extra_spec=mock_policy_extra_spec,
+            setup_configs=setup_configs,
+        )
+    )
+    logger._episode_uuid = "test-uuid-123"
+    logger._last_timestep_publish_time_ns = 987654321
+    logger._write_session()
+
+    expected_calls = [
+        mock.call("robot_config", struct_pb2.Value(string_value="panda_v1")),
+        mock.call("environment_settings", struct_pb2.Value(number_value=2.5)),
+        mock.call("calibration_data", struct_pb2.Value(bool_value=True)),
+    ]
+    mock_session_manager.add_setup_config.assert_has_calls(
+        expected_calls, any_order=True
+    )
+    self.assertEqual(mock_session_manager.add_setup_config.call_count, 3)
+
+    # Verify other interactions within _write_session
+    mock_session_manager.stop_session.assert_called_once_with(
+        stop_timestamp_nsec=987654321
+    )
+    mock_writer.enqueue_session_data.assert_called_once()
+    mock_validate_metadata.assert_called_once()
+
+  @mock.patch.object(
+      episodic_logger,
+      "_validate_metadata",
+      autospec=True,
+  )
+  @mock.patch.object(session_manager_lib, "SessionManager", autospec=True)
+  @mock.patch.object(log_writer, "create_log_writer", autospec=True)
+  @mock.patch.object(
+      episodic_logger.EpisodicLogger, "_write_batch", autospec=True
+  )
+  def test_write_triggers_setup_configs(
+      self,
+      mock_write_batch,
+      mock_create_log_writer,
+      mock_session_manager_cls,
+      mock_validate_metadata,
+  ):
+    mock_session_manager = mock_session_manager_cls.return_value
+    mock_writer = mock_create_log_writer.return_value
+    setup_configs = {"another_config": struct_pb2.Value(bool_value=True)}
+
+    dummy_spec = mock.MagicMock()
+    mock_timestep_spec = gdmr_types.TimeStepSpec(
+        step_type=gdmr_types.STEP_TYPE_SPEC,
+        reward=specs.Array(shape=(), dtype=np.float32),
+        discount=specs.Array(shape=(), dtype=np.float32),
+        observation={  # pyrefly: ignore[bad-argument-type]
+            "instruction": specs.StringArray(shape=(), name="instruction"),
+            "feature1": specs.Array(shape=(4,), dtype=np.float32),
+            "feature2": specs.Array(shape=(3,), dtype=np.int32),
+            "feature3": specs.Array(shape=(), dtype=np.float64),
+            _TEST_PROPRIO_KEY: specs.Array(shape=(14,), dtype=np.float64),
+        },
+    )
+    mock_action_spec = dummy_spec
+    mock_policy_extra_spec = {"extra": dummy_spec}
+
+    logger = episodic_logger.EpisodicLogger.create(
+        episodic_logger.EpisodicLoggerConfig(
+            agent_id="test_agent",
+            task_id="test_task",
+            output_directory="/tmp/logs",
+            image_observation_keys=[],
+            proprioceptive_observation_keys=[],
+            timestep_spec=mock_timestep_spec,
+            action_spec=mock_action_spec,
+            policy_extra_spec=mock_policy_extra_spec,
+            setup_configs=setup_configs,
+        )
+    )
+
+    # Set up logger state so write() calls _write_session
+    logger._is_recording = True
+    logger._current_episode_step = 2
+    logger._episode_uuid = "test-write-uuid"
+    logger._last_timestep_publish_time_ns = 999
+
+    logger.write()
+
+    mock_session_manager.add_setup_config.assert_called_once_with(
+        "another_config", struct_pb2.Value(bool_value=True)
+    )
+    mock_validate_metadata.assert_called_once()
+    mock_write_batch.assert_called_once_with(logger, last_batch=True)
+    mock_writer.finalize_episode.assert_called_once_with("test-write-uuid")
 
 
 if __name__ == "__main__":

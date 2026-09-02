@@ -82,7 +82,7 @@ def _prepare_image_parts(
     return [types.Part.from_bytes(data=stitched_bytes, mime_type="image/jpeg")]
 
   return [
-      types.Part.from_bytes(data=blob.data, mime_type=blob.mime_type)
+      types.Part.from_bytes(data=blob.data, mime_type=blob.mime_type)  # pyrefly: ignore[bad-argument-type]
       for blob in img_dict.values()
   ]
 
@@ -133,7 +133,7 @@ class GeminiLiveAPIHandler:
     self._config = config
     self._client = genai.Client(
         api_key=api_key,
-        http_options=http_options,
+        http_options=http_options,  # pyrefly: ignore[bad-argument-type]
     )
     self._live_config = live_config
     self._bus = bus
@@ -797,7 +797,7 @@ class GeminiLiveAPIHandler:
           self._config.show_camera_name_in_stitched_image,
       )
       await self._session.send_client_content(
-          turns={"role": "user", "parts": parts},
+          turns={"role": "user", "parts": parts},  # pyrefly: ignore[bad-argument-type]
           turn_complete=True,
       )
     else:
@@ -823,8 +823,8 @@ class GeminiLiveAPIHandler:
         == types.TurnCoverage.TURN_INCLUDES_ONLY_ACTIVITY
     ):
       # Send tool response with SILENT scheduling, then vision update
-      assert len(tool_response.function_responses) == 1
-      response = tool_response.function_responses[0]
+      assert len(tool_response.function_responses) == 1  # pyrefly: ignore[bad-argument-type]
+      response = tool_response.function_responses[0]  # pyrefly: ignore[unsupported-operation]
       response.scheduling = types.FunctionResponseScheduling.SILENT
       logging.info("Beyond Live send_tool_response. If case: %s", response)
       await self._session.send_tool_response(function_responses=response)
@@ -834,14 +834,14 @@ class GeminiLiveAPIHandler:
           self._config.show_camera_name_in_stitched_image,
       )
       await self._session.send_client_content(
-          turns={"role": "user", "parts": parts},
+          turns={"role": "user", "parts": parts},  # pyrefly: ignore[bad-argument-type]
           turn_complete=True,
       )
     else:
       logging.info(
           "Beyond Live send_tool_response. Else case: %s", tool_response)
       await self._session.send_tool_response(
-          function_responses=tool_response.function_responses,
+          function_responses=tool_response.function_responses,  # pyrefly: ignore[bad-argument-type]
       )
 
   async def _handle_go_away_and_reconnect(
@@ -980,7 +980,7 @@ class GeminiLiveAPIHandler:
     if isinstance(self._live_config, dict):
       new_config = dict(self._live_config)
       new_config["session_resumption"] = {"handle": handle}
-      return new_config
+      return new_config  # pyrefly: ignore[bad-return]
     else:
       config_dict = {}
       if self._live_config.generation_config:
@@ -1014,4 +1014,4 @@ class GeminiLiveAPIHandler:
       config_dict["session_resumption"] = types.SessionResumptionConfig(
           handle=handle
       )
-      return config_dict
+      return config_dict  # pyrefly: ignore[bad-return]

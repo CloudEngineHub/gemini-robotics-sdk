@@ -107,48 +107,53 @@ def _print_orchestrator_work_unit_info(
         for s_obj in scene_details.sceneObjects:
           print(" Scene Object:")
           print(f"   Object ID: {s_obj.objectId}")
-          for t_label in s_obj.overlayTextLabels.labels:
+          for t_label in s_obj.overlayTextLabels.labels:  # pyrefly: ignore[missing-attribute]
             print(f"   Overlay Text Label: {t_label.text}")
-          print(f"   Icon: {s_obj.evaluationLocation.overlayIcon}")
-          print(f"   Layer Order: {s_obj.evaluationLocation.layerOrder}")
+          print(f"   Icon: {s_obj.evaluationLocation.overlayIcon}")  # pyrefly: ignore[missing-attribute]
+          print(f"   Layer Order: {s_obj.evaluationLocation.layerOrder}")  # pyrefly: ignore[missing-attribute]
           print(
+              # pyrefly: ignore[missing-attribute]
               "   RGB Hex Color Value:"
               f" {s_obj.evaluationLocation.rgbHexColorValue}"
           )
 
-          if s_obj.evaluationLocation.location:
+          if s_obj.evaluationLocation.location:  # pyrefly: ignore[missing-attribute]
             print("   Coordinate: (UI frame)")
-            print(f"     x: {s_obj.evaluationLocation.location.coordinate.x}")
-            print(f"     y: {s_obj.evaluationLocation.location.coordinate.y}")
-            if s_obj.evaluationLocation.location.direction:
+            print(f"     x: {s_obj.evaluationLocation.location.coordinate.x}")  # pyrefly: ignore[missing-attribute]
+            print(f"     y: {s_obj.evaluationLocation.location.coordinate.y}")  # pyrefly: ignore[missing-attribute]
+            if s_obj.evaluationLocation.location.direction:  # pyrefly: ignore[missing-attribute]
               print("   Direction:")
               print(
+                  # pyrefly: ignore[missing-attribute]
                   "     radian:"
                   f" {s_obj.evaluationLocation.location.direction.rad}"
               )
 
-          if s_obj.evaluationLocation.containerArea:
-            if s_obj.evaluationLocation.containerArea.circle:
+          if s_obj.evaluationLocation.containerArea:  # pyrefly: ignore[missing-attribute]
+            if s_obj.evaluationLocation.containerArea.circle:  # pyrefly: ignore[missing-attribute]
               print("   Coordinate: (UI frame)")
               print(
+                  # pyrefly: ignore[missing-attribute]
                   "     x:"
                   f" {s_obj.evaluationLocation.containerArea.circle.center.x}"
               )
               print(
+                  # pyrefly: ignore[missing-attribute]
                   "     y:"
                   f" {s_obj.evaluationLocation.containerArea.circle.center.y}"
               )
               print(
+                  # pyrefly: ignore[missing-attribute]
                   "   Radius:"
                   f" {s_obj.evaluationLocation.containerArea.circle.radius}"
               )
-            if s_obj.evaluationLocation.containerArea.box:
+            if s_obj.evaluationLocation.containerArea.box:  # pyrefly: ignore[missing-attribute]
               print("   Coordinate: (UI frame)")
-              print(f"     x: {s_obj.evaluationLocation.containerArea.box.x}")
-              print(f"     y: {s_obj.evaluationLocation.containerArea.box.y}")
-              print(f"   Width: {s_obj.evaluationLocation.containerArea.box.w}")
+              print(f"     x: {s_obj.evaluationLocation.containerArea.box.x}")  # pyrefly: ignore[missing-attribute]
+              print(f"     y: {s_obj.evaluationLocation.containerArea.box.y}")  # pyrefly: ignore[missing-attribute]
+              print(f"   Width: {s_obj.evaluationLocation.containerArea.box.w}")  # pyrefly: ignore[missing-attribute]
               print(
-                  f"   Height: {s_obj.evaluationLocation.containerArea.box.h}"
+                  f"   Height: {s_obj.evaluationLocation.containerArea.box.h}"  # pyrefly: ignore[missing-attribute]
               )
           print(
               "   Reference Image Artifact ID:"

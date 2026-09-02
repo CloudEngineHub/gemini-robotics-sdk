@@ -193,13 +193,12 @@ class Client:
             'image_compression_jpeg_quality': image_compression_jpeg_quality,
         }
         if timeout is not None:
-          partial_kwargs['config'] = types.GenerateContentConfig(
+          partial_kwargs['config'] = types.GenerateContentConfig(  # pyrefly: ignore[bad-assignment]
               http_options=types.HttpOptions(timeout=timeout * 1000)
           )
 
-        self.models.generate_content = functools.partial(
-            self._robotics_generate_content,
-            **partial_kwargs
+        self.models.generate_content = functools.partial(  # pyrefly: ignore[missing-attribute]
+            self._robotics_generate_content, **partial_kwargs
         )
       case _CONNECTION.LOCAL:
         url = grpc_url or os.environ.get('GOOGLE_GEMINI_BASE_URL')
@@ -217,7 +216,7 @@ class Client:
             channel, method_name, use_msgpack=self._use_msgpack
         )
         self.models: Any = lambda: None
-        self.models.generate_content = functools.partial(
+        self.models.generate_content = functools.partial(  # pyrefly: ignore[missing-attribute]
             self._robotics_generate_content,
             image_compression_jpeg_quality=image_compression_jpeg_quality,
         )
@@ -276,6 +275,7 @@ class Client:
           f'Failed to parse contents[-1] as JSON: {contents[-1]}'
       ) from e
 
+    t_img_start = time.perf_counter()
     for key, value in input_query.items():
       if key.startswith('images/'):
         image_bytes = _coerced_to_image_bytes(
@@ -305,6 +305,8 @@ class Client:
         raise ValueError(
             f'Unsupported value type: {type(value)} for key {key}.'
         )
+    client_image_encode_ms = (time.perf_counter() - t_img_start) * 1000.0
+
     match self._robotics_api_connection:
       case _CONNECTION.CLOUD:
         if self._use_msgpack:
@@ -324,42 +326,51 @@ class Client:
         if timeout_ms:
           timeout_seconds = timeout_ms // 1000
           timeout_nanos = (timeout_ms % 1000) * 1000000
-          req_body['modelOptions'] = {
+          req_body['modelOptions'] = {  # pyrefly: ignore[bad-assignment]
               'timeout': {'seconds': timeout_seconds, 'nanos': timeout_nanos}
           }
 
+        t_rpc_start = time.perf_counter()
         logging.debug('Request: %s', req_body)
         req = self._client.cmCustom(body=req_body)  # pytype: disable=attribute-error
         res = req.execute(num_retries=self._num_retries)
         logging.debug('Response: %s', res)
+        client_rpc_ms = (time.perf_counter() - t_rpc_start) * 1000.0
+
         response = lambda: None
         if self._use_msgpack:
           response_data = msgpack.unpackb(
               base64.b64decode(res['outputBytes']), raw=False
           )
-          response.text = json.dumps(response_data)
+          response.text = json.dumps(response_data)  # pyrefly: ignore[missing-attribute]
         else:
-          response.text = base64.b64decode(
-              res['outputBytes']
-          ).decode('utf-8')
-        response.backend_request_time = res.get('backendRequestTime')
-        response.backend_response_time = res.get('backendResponseTime')
+          response.text = (  # pyrefly: ignore[missing-attribute]
+              base64.b64decode(res['outputBytes']).decode('utf-8')
+          )
+        response.backend_request_time = res.get('backendRequestTime')  # pyrefly: ignore[missing-attribute]
+        response.backend_response_time = res.get('backendResponseTime')  # pyrefly: ignore[missing-attribute]
+        response.client_image_encode_ms = client_image_encode_ms  # pyrefly: ignore[missing-attribute]
+        response.client_rpc_ms = client_rpc_ms  # pyrefly: ignore[missing-attribute]
       case _CONNECTION.LOCAL:
+        t_rpc_start = time.perf_counter()
         req_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        res_text = self._client(query)
+        res_text = self._client(query)  # pyrefly: ignore[not-callable]
         res_time = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        client_rpc_ms = (time.perf_counter() - t_rpc_start) * 1000.0
 
         response = lambda: None
-        response.text = res_text
-        response.backend_request_time = req_time
-        response.backend_response_time = res_time
+        response.text = res_text  # pyrefly: ignore[missing-attribute]
+        response.backend_request_time = req_time  # pyrefly: ignore[missing-attribute]
+        response.backend_response_time = res_time  # pyrefly: ignore[missing-attribute]
+        response.client_image_encode_ms = client_image_encode_ms  # pyrefly: ignore[missing-attribute]
+        response.client_rpc_ms = client_rpc_ms  # pyrefly: ignore[missing-attribute]
       case _:
         raise ValueError(
             'Unsupported robotics_api_connection:'
             f' {self._robotics_api_connection}. Only Cloud and local are'
             ' supported.'
         )
-    return response
+    return response  # pyrefly: ignore[bad-return]
 
   def __getattr__(self, name):
     if self._robotics_api_connection == _CONNECTION.CLOUD_GENAI:
@@ -371,9 +382,9 @@ class Client:
 def _coerced_to_image_bytes(content, image_compression_jpeg_quality) -> bytes:
   """Coerce content to image bytes."""
   if isinstance(content, types.Part):
-    if content.inline_data.mime_type in ('image/jpeg', 'image/png'):
-      return content.inline_data.data
-    raise ValueError(f'Unsupported image mime type: {content.mime_type}')
+    if content.inline_data.mime_type in ('image/jpeg', 'image/png'):  # pyrefly: ignore[missing-attribute]
+      return content.inline_data.data  # pyrefly: ignore[missing-attribute]
+    raise ValueError(f'Unsupported image mime type: {content.mime_type}')  # pyrefly: ignore[missing-attribute]
   elif isinstance(content, bytes):
     if content[:4] == b'\x89PNG':
       return content

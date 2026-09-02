@@ -79,6 +79,7 @@ class EpisodicLoggerConfig:
       default number of workers will be used.
     file_shard_size_limit_bytes: The file shard size limits in bytes. Default is
       constants.DEFAULT_FILE_SHARD_SIZE_LIMIT_BYTES (1GB).
+    setup_configs: The setup configs to be added to the session.
   """
 
   agent_id: str
@@ -88,7 +89,7 @@ class EpisodicLoggerConfig:
   proprioceptive_observation_keys: Sequence[str]
   timestep_spec: gdmr_types.TimeStepSpec
   action_spec: gdmr_types.ActionSpec  # pytype: disable=invalid-annotation
-  policy_extra_spec: gdmr_types.ExtraOutputSpec
+  policy_extra_spec: gdmr_types.ExtraOutputSpec  # pyrefly: ignore[invalid-type-var]
   metadata_config: session_metadata_lib.SessionMetadataConfig = (
       dataclasses.field(
           default_factory=session_metadata_lib.SessionMetadataConfig
@@ -102,6 +103,7 @@ class EpisodicLoggerConfig:
   file_shard_size_limit_bytes: int = (
       constants.DEFAULT_FILE_SHARD_SIZE_LIMIT_BYTES
   )
+  setup_configs: Mapping[str, struct_pb2.Value] | None = None
 
   def __post_init__(self):
     for field_name in ("agent_id", "task_id"):
@@ -177,11 +179,11 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         required_topics=required_topics,
         policy_environment_metadata_params=session_metadata_lib.PolicyEnvironmentMetadataParams(
             jpeg_compression_keys=config.image_observation_keys,
-            observation_spec=config.timestep_spec.observation,
-            reward_spec=config.timestep_spec.reward,
-            discount_spec=config.timestep_spec.discount,
-            action_spec=config.action_spec,
-            policy_extra_spec=config.policy_extra_spec,
+            observation_spec=config.timestep_spec.observation,  # pyrefly: ignore[bad-argument-type]
+            reward_spec=config.timestep_spec.reward,  # pyrefly: ignore[bad-argument-type]
+            discount_spec=config.timestep_spec.discount,  # pyrefly: ignore[bad-argument-type]
+            action_spec=config.action_spec,  # pyrefly: ignore[bad-argument-type]
+            policy_extra_spec=config.policy_extra_spec,  # pyrefly: ignore[bad-argument-type]
             policy_type=config.metadata_config.policy_type,
             control_timestep=config.metadata_config.control_timestep_seconds,
             embodiment_version=config.metadata_config.embodiment_version,
@@ -285,6 +287,8 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
     # called.
     self._stopped = False
 
+    self._setup_configs = config.setup_configs
+
   def __del__(self):
     """Stops the logger and writes any remaining data."""
     self.stop()
@@ -372,7 +376,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
 
   def record_action_and_next_timestep(
       self,
-      action: gdmr_types.ActionType,
+      action: gdmr_types.ActionType,  # pyrefly: ignore[invalid-type-var]
       next_timestep: dm_env.TimeStep,
       policy_extra: Mapping[str, Any],
   ) -> None:
@@ -469,7 +473,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         discount = discount.astype(np.float32, copy=False)
       self._timestep_batch[constants.DISCOUNT_KEY].append(discount)
 
-  def _add_action_to_batch(self, action: gdmr_types.ActionType) -> None:
+  def _add_action_to_batch(self, action: gdmr_types.ActionType) -> None:  # pyrefly: ignore[invalid-type-var]
     # Adds the action to the current batch.
     if isinstance(action, Mapping):
       for key, value in action.items():
@@ -517,7 +521,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
     )
 
     for key, value in self._timestep_batch.items():
-      self._timestep_batch[key] = np.asarray(value)
+      self._timestep_batch[key] = np.asarray(value)  # pyrefly: ignore[unsupported-operation]
 
     self._writer.enqueue_episode_data(
         self._timestep_batch, self._timestep_publish_time_ns, timestep_options
@@ -538,7 +542,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
     )
 
     for key, value in self._action_batch.items():
-      self._action_batch[key] = np.asarray(value)
+      self._action_batch[key] = np.asarray(value)  # pyrefly: ignore[unsupported-operation]
 
     self._writer.enqueue_episode_data(
         self._action_batch, self._action_publish_time_ns, action_options
@@ -550,7 +554,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         timestamp_ns=self._action_publish_time_ns[-1],
     )
     for key, value in self._policy_extra_batch.items():
-      self._policy_extra_batch[key] = np.asarray(value)
+      self._policy_extra_batch[key] = np.asarray(value)  # pyrefly: ignore[unsupported-operation]
 
     self._writer.enqueue_episode_data(
         self._policy_extra_batch,
@@ -682,6 +686,10 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
         )
     )
 
+    if self._setup_configs:
+      for config_id, config in self._setup_configs.items():
+        self._session_manager.add_setup_config(config_id, config)
+
     episode_end_time_ns = self._last_timestep_publish_time_ns
     logging.info("Episode end time ns: %d", episode_end_time_ns)
     session = self._session_manager.stop_session(
@@ -751,7 +759,7 @@ class EpisodicLogger(episodic_logger.EpisodicLogger):
       logging.exception("Discount validation failed for timestep.")
       raise
 
-  def _validate_action(self, raw_action: gdmr_types.ActionType) -> None:
+  def _validate_action(self, raw_action: gdmr_types.ActionType) -> None:  # pyrefly: ignore[invalid-type-var]
     try:
       tree.map_structure(
           lambda action, spec: spec.validate(action),
@@ -778,7 +786,7 @@ def _validate_metadata(
     image_observation_keys: Sequence[str],
     proprioceptive_observation_keys: Sequence[str],
     timestep_spec: gdmr_types.TimeStepSpec,
-    action_spec: gdmr_types.ActionSpec,
+    action_spec: gdmr_types.ActionSpec,  # pyrefly: ignore[invalid-type-var]
 ) -> None:
   """Validates that the metadata to comply with the specs we currently support."""
   _validate_observation_is_mapping(timestep_spec)
@@ -800,11 +808,11 @@ def _validate_observation_is_mapping(
 def _validate_instruction_in_timestep(
     timestep_spec: gdmr_types.TimeStepSpec,
 ) -> None:
-  if "instruction" not in timestep_spec.observation:
+  if "instruction" not in timestep_spec.observation:  # pyrefly: ignore[not-iterable]
     raise KeyError("'instruction' is required in timestep_spec.observation.")
 
 
-def _validate_action(action_spec: gdmr_types.ActionSpec):
+def _validate_action(action_spec: gdmr_types.ActionSpec):  # pyrefly: ignore[invalid-type-var]
   if isinstance(action_spec, Mapping):
     for _, value in action_spec.items():
       if not isinstance(value, specs.BoundedArray):
@@ -824,7 +832,7 @@ def _validate_image_observation_keys(
   if not image_observation_keys:
     return
   for image_key in image_observation_keys:
-    if image_key not in timestep_spec.observation:
+    if image_key not in timestep_spec.observation:  # pyrefly: ignore[not-iterable]
       raise KeyError(
           f"Image observation key {image_key} not found in observation spec."
       )
@@ -839,12 +847,12 @@ def _validate_proprioceptive_observation_keys(
     return
 
   for proprio_key in proprioceptive_observation_keys:
-    if proprio_key not in timestep_spec.observation:
+    if proprio_key not in timestep_spec.observation:  # pyrefly: ignore[not-iterable]
       raise KeyError(
           f"Proprio key {proprio_key} not found in observation spec."
       )
 
-    if not isinstance(timestep_spec.observation[proprio_key], specs.Array):
+    if not isinstance(timestep_spec.observation[proprio_key], specs.Array):  # pyrefly: ignore[bad-index]
       raise TypeError(
           f"Proprio data {proprio_key} must be a specs.Array in observation"
           " spec."

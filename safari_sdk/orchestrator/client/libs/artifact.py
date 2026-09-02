@@ -61,7 +61,7 @@ class OrchestratorArtifact:
 
   def disconnect(self) -> None:
     """Clears current connection to the orchestrator server."""
-    self._connection = None
+    self._connection = None  # pyrefly: ignore[bad-assignment]
 
   def get_artifact(self, artifact_id: str) -> _RESPONSE:
     """Gets detailed artifact information."""
@@ -88,7 +88,7 @@ class OrchestratorArtifact:
       return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     as_json = json.dumps(response)
-    artifact_response = artifact.LoadArtifactResponse.from_json(as_json)
+    artifact_response = artifact.LoadArtifactResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
 
     artifact_obj = artifact_response.artifact
     if not artifact_obj or not artifact_obj.uri:
@@ -124,7 +124,7 @@ class OrchestratorArtifact:
       return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     as_json = json.dumps(response)
-    artifact_response = artifact.LoadArtifactResponse.from_json(as_json)
+    artifact_response = artifact.LoadArtifactResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
 
     if not artifact_response or not artifact_response.artifact:
       return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
@@ -184,7 +184,7 @@ class OrchestratorArtifact:
       return _RESPONSE(error_message=_ERROR_EMPTY_RESPONSE + error_id)
 
     as_json = json.dumps(response)
-    artifact_response = artifact.UploadTextLogArtifactResponse.from_json(
+    artifact_response = artifact.UploadTextLogArtifactResponse.from_json(  # pyrefly: ignore[missing-attribute]
         as_json
     )
 

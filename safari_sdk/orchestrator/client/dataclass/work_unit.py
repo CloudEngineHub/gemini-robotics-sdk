@@ -388,7 +388,7 @@ class ScenePresetDetails:
   def get_all_parameters(self) -> dict[str, Any]:
     if self.parameters is None:
       return {}
-    return {kv.key: kv.get_value() for kv in self.parameters}
+    return {kv.key: kv.get_value() for kv in self.parameters}  # pyrefly: ignore[bad-return]
 
   def get_parameter_value(self, key: str, default_value: Any = None) -> Any:
     if self.parameters is None:
@@ -419,7 +419,7 @@ class PolicyDetails:
   def get_all_parameters(self) -> dict[str, Any]:
     if self.parameters is None:
       return {}
-    return {kv.key: kv.get_value() for kv in self.parameters}
+    return {kv.key: kv.get_value() for kv in self.parameters}  # pyrefly: ignore[bad-return]
 
   def get_parameter_value(self, key: str, default_value: Any = None) -> Any:
     if self.parameters is None:
@@ -587,6 +587,7 @@ class WorkUnit:
   outcome: WorkUnitOutcome | None = None
   note: str | None = None
   obfuscatedJobTypeCode: str | None = None
+  tags: list[str] | None = None
 
   def __post_init__(self):
     if self.stage is None:

@@ -333,7 +333,7 @@ class McapParserUtilsTest(parameterized.TestCase):
         ),
         reward=specs.Array(shape=(), dtype=np.float32),
         discount=specs.Array(shape=(), dtype=np.float32),
-        observation={"sensor": specs.Array(shape=(2,), dtype=np.float32)},
+        observation={"sensor": specs.Array(shape=(2,), dtype=np.float32)},  # pyrefly: ignore[bad-argument-type]
     )
     act_spec = {
         "move": specs.BoundedArray(
@@ -350,7 +350,7 @@ class McapParserUtilsTest(parameterized.TestCase):
         mcap_parser_utils.parse_examples_to_dm_env_types(
             timestep_spec=ts_spec,
             action_spec=act_spec,
-            policy_extra_spec=extra_spec,
+            policy_extra_spec=extra_spec,  # pyrefly: ignore[bad-argument-type]
             timesteps_example=[ts_ex],
             actions_example=[act_ex],
             policy_extra_example=[extra_ex],

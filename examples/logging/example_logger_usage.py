@@ -62,7 +62,7 @@ def write_example_to_mcap(output_directory: str):
       # they must be specified.
       reward=specs.Array(shape=(), dtype=np.float32),
       discount=specs.Array(shape=(), dtype=np.float32),
-      observation={
+      observation={  # pyrefly: ignore[bad-argument-type]
           "instruction": specs.StringArray(shape=(), name="instruction"),
           # Here we are specifying that our images will be numpy arrays of
           # shape image_shape, and that they will be of type np.uint8.

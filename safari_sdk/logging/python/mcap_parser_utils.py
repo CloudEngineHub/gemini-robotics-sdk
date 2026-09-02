@@ -192,8 +192,8 @@ def read_file_metadata_proto_data(
 
 def parse_examples_to_dm_env_types(
     timestep_spec: gdmr_types.TimeStepSpec,
-    action_spec: gdmr_types.ActionSpec,
-    policy_extra_spec: gdmr_types.ExtraOutputSpec,
+    action_spec: gdmr_types.ActionSpec,  # pyrefly: ignore[invalid-type-var]
+    policy_extra_spec: gdmr_types.ExtraOutputSpec,  # pyrefly: ignore[invalid-type-var]
     timesteps_example: list[example_pb2.Example],
     actions_example: list[example_pb2.Example],
     policy_extra_example: list[example_pb2.Example],
@@ -203,7 +203,7 @@ def parse_examples_to_dm_env_types(
     discount_key: str,
     action_key_prefix: str,
     policy_extra_key_prefix: str,
-) -> tuple[
+) -> tuple[  # pyrefly: ignore[invalid-type-var]
     list[dm_env.TimeStep],
     list[gdmr_types.ActionType],
     list[Mapping[str, Any] | np.ndarray],
@@ -265,15 +265,15 @@ def _parse_timestep_from_example(
       candidate_discounts[key] = python_value
 
   observations = _parse_and_match_spec(
-      timestep_spec.observation,
+      timestep_spec.observation,  # pyrefly: ignore[bad-argument-type]
       observation_key_prefix,
       candidate_observations,
   )
   reward = _parse_and_match_spec(
-      timestep_spec.reward, reward_key, candidate_rewards
+      timestep_spec.reward, reward_key, candidate_rewards  # pyrefly: ignore[bad-argument-type]
   )
   discount = _parse_and_match_spec(
-      timestep_spec.discount,
+      timestep_spec.discount,  # pyrefly: ignore[bad-argument-type]
       discount_key,
       candidate_discounts,
   )
@@ -288,9 +288,9 @@ def _parse_timestep_from_example(
 
 def _parse_action_from_example(
     action_example: example_pb2.Example,
-    action_spec: gdmr_types.ActionSpec,
+    action_spec: gdmr_types.ActionSpec,  # pyrefly: ignore[invalid-type-var]
     action_key_prefix: str,
-) -> gdmr_types.ActionType:
+) -> gdmr_types.ActionType:  # pyrefly: ignore[invalid-type-var]
   """Parses an action from an example."""
   actions = {}
   # Filter for only the action keys. We expect the example to contain only
@@ -308,12 +308,12 @@ def _parse_action_from_example(
         f" {len(actions)}."
     )
 
-  return _parse_and_match_spec(action_spec, action_key_prefix, actions)
+  return _parse_and_match_spec(action_spec, action_key_prefix, actions)  # pyrefly: ignore[bad-argument-type]
 
 
 def _parse_policy_extra_from_example(
     policy_extra_example: example_pb2.Example,
-    policy_extra_spec: gdmr_types.ExtraOutputSpec,
+    policy_extra_spec: gdmr_types.ExtraOutputSpec,  # pyrefly: ignore[invalid-type-var]
     policy_extra_key_prefix: str,
 ) -> Mapping[str, Any] | np.ndarray:
   """Parses policy extra from an example."""
@@ -332,7 +332,7 @@ def _parse_policy_extra_from_example(
     )
 
   return _parse_and_match_spec(
-      policy_extra_spec, policy_extra_key_prefix, policy_extra
+      policy_extra_spec, policy_extra_key_prefix, policy_extra  # pyrefly: ignore[bad-argument-type]
   )
 
 
@@ -459,7 +459,7 @@ def _parse_and_match_spec(
   parsed_values = {}
   for key, value in values.items():
     stripped_key = key.removeprefix(f"{prefix}/")
-    spec = cast(specs.Array, values_spec[stripped_key])
+    spec = cast(specs.Array, values_spec[stripped_key])  # pyrefly: ignore[bad-index]
 
     # Handle compressed images (JPEG/PNG) before any other type checks.
     decoded_image = _maybe_decode_image(value, key=key)

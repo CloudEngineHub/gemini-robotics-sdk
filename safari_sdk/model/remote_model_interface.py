@@ -109,6 +109,9 @@ class RemoteModelInterface(model_interface.ModelInterface):
     )
     self._last_remote_inference_time_ms = None
     self._last_network_overhead_ms = None
+    self._last_client_image_encode_ms: float | None = None
+    self._last_wire_transit_ms: float | None = None
+    self._last_client_processing_ms: float | None = None
     self._last_rng_key: list[int] | None = None
 
   def query_model(
@@ -144,9 +147,6 @@ class RemoteModelInterface(model_interface.ModelInterface):
     end_time_sec = time.perf_counter()
     client_round_trip_ms = (end_time_sec - start_time_sec) * 1000.0
 
-    # Calculate remote inference time
-    self._update_latency_metrics(response, client_round_trip_ms)
-
     # Parse the response text (assuming its JSON containing the action)
     if response.text:
       response_data = json.loads(response.text)
@@ -179,14 +179,22 @@ class RemoteModelInterface(model_interface.ModelInterface):
       )
 
     self._last_rng_key = response_data.get(constants.RNG_KEY_RESPONSE_KEY)
+
+    # Calculate remote inference time, wire transit, and client processing
+    self._update_latency_metrics(response, client_round_trip_ms)
+
     return action_chunk
 
   def _update_latency_metrics(
       self, response: Any, client_round_trip_ms: float
   ) -> None:
-    """Calculates and updates remote inference time and network overhead."""
+    """Calculates and updates remote inference time, wire transit, and overhead."""
     backend_req_time = getattr(response, "backend_request_time", None)
     backend_res_time = getattr(response, "backend_response_time", None)
+    self._last_client_image_encode_ms = getattr(
+        response, "client_image_encode_ms", None
+    )
+    client_rpc_ms = getattr(response, "client_rpc_ms", None)
 
     if isinstance(backend_req_time, str) and isinstance(backend_res_time, str):
       try:
@@ -202,21 +210,53 @@ class RemoteModelInterface(model_interface.ModelInterface):
         self._last_network_overhead_ms = max(
             0.0, client_round_trip_ms - self._last_remote_inference_time_ms
         )
+        if client_rpc_ms is not None:
+          self._last_wire_transit_ms = max(
+              0.0, client_rpc_ms - self._last_remote_inference_time_ms
+          )
+          self._last_client_processing_ms = max(
+              0.0, client_round_trip_ms - client_rpc_ms
+          )
+        else:
+          self._last_wire_transit_ms = None
+          self._last_client_processing_ms = None
       except (ValueError, TypeError):
         self._last_remote_inference_time_ms = None
         self._last_network_overhead_ms = None
+        self._last_wire_transit_ms = None
+        self._last_client_processing_ms = None
     else:
       self._last_remote_inference_time_ms = None
       self._last_network_overhead_ms = None
+      self._last_wire_transit_ms = None
+      self._last_client_processing_ms = None
 
   @property
   def last_remote_inference_time_ms(self) -> float | None:
+    """Remote model execution time in ms (backendResponseTime - backendRequestTime)."""
     return self._last_remote_inference_time_ms
 
   @property
+  def last_wire_transit_ms(self) -> float | None:
+    """Pure network flight time in ms across wire (client_rpc_ms - remote_inference_ms)."""
+    return self._last_wire_transit_ms
+
+  @property
+  def last_client_processing_ms(self) -> float | None:
+    """Client-side CPU processing time in ms (client_round_trip_ms - client_rpc_ms)."""
+    return self._last_client_processing_ms
+
+  @property
+  def last_client_image_encode_ms(self) -> float | None:
+    """Client CPU time in ms spent JPEG encoding all camera image feeds."""
+    return self._last_client_image_encode_ms
+
+  @property
   def last_network_overhead_ms(self) -> float | None:
+    """Total non-server overhead in ms (client round-trip - remote inference)."""
     return self._last_network_overhead_ms
 
   @property
   def last_rng_key(self) -> list[int] | None:
+    """Next PRNG seed key returned by the model server, if available."""
     return self._last_rng_key

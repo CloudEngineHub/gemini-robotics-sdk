@@ -185,8 +185,8 @@ def specs_from_session(
   # Combine into TimeStepSpec.
   timestep_spec = gdmr_types.TimeStepSpec(
       step_type=gdmr_types.STEP_TYPE_SPEC,
-      reward=reward_spec,
-      discount=discount_spec,
+      reward=reward_spec,  # pyrefly: ignore[bad-argument-type]
+      discount=discount_spec,  # pyrefly: ignore[bad-argument-type]
       observation=observation_spec,
   )
 

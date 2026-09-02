@@ -102,7 +102,7 @@ class UnaryGenAIHandler(nonstreaming_handler.NonStreamingHandler):
     self._client = nonstreaming_handler.client_init_with_retries(
         lambda: genai.Client(
             api_key=api_key,
-            http_options=http_options,
+            http_options=http_options,  # pyrefly: ignore[bad-argument-type]
         ),
         operation_name="GenAI Client creation",
     )
@@ -424,7 +424,7 @@ class UnaryGenAIHandler(nonstreaming_handler.NonStreamingHandler):
         if self._include_stream_names and blob.display_name:
           parts.append(types.Part.from_text(text=blob.display_name))
         parts.append(
-            types.Part.from_bytes(data=blob.data, mime_type="image/jpeg")
+            types.Part.from_bytes(data=blob.data, mime_type="image/jpeg")  # pyrefly: ignore[bad-argument-type]
         )
 
     # Create user content and add to history.
@@ -482,18 +482,18 @@ class UnaryGenAIHandler(nonstreaming_handler.NonStreamingHandler):
     }
     if response.usage_metadata:
       metadata["prompt_token_count"] = (
-          response.usage_metadata.prompt_token_count
+          response.usage_metadata.prompt_token_count  # pyrefly: ignore[unsupported-operation]
       )
       metadata["candidates_token_count"] = (
-          response.usage_metadata.candidates_token_count
+          response.usage_metadata.candidates_token_count  # pyrefly: ignore[unsupported-operation]
       )
-      metadata["total_token_count"] = response.usage_metadata.total_token_count
+      metadata["total_token_count"] = response.usage_metadata.total_token_count  # pyrefly: ignore[unsupported-operation]
 
     if self._config.non_streaming_enable_context_snapshot_logging:
       await self._publish_event(
           event_bus.EventType.CONTEXT_SNAPSHOT,
           self._serialize_conversation_history(),
-          metadata=metadata,
+          metadata=metadata,  # pyrefly: ignore[bad-argument-type]
       )
 
     if response.usage_metadata:
@@ -624,7 +624,7 @@ class UnaryGenAIHandler(nonstreaming_handler.NonStreamingHandler):
             part_dict["text"] = part.text
           elif part.inline_data:
             part_dict["inline_data"] = base64.b64encode(
-                part.inline_data.data
+                part.inline_data.data  # pyrefly: ignore[bad-argument-type]
             ).decode("ascii")
             part_dict["mime_type"] = part.inline_data.mime_type
           elif part.function_call:

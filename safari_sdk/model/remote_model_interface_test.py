@@ -125,6 +125,8 @@ class RemoteModelInterfaceTest(parameterized.TestCase):
       )
       encoded_response.backend_request_time = "2026-05-15T01:00:00.000000Z"
       encoded_response.backend_response_time = "2026-05-15T01:00:00.500000Z"
+      encoded_response.client_image_encode_ms = 100.0
+      encoded_response.client_rpc_ms = 700.0
 
       remote_model._client.models.generate_content = mock.MagicMock(
           return_value=encoded_response
@@ -138,16 +140,27 @@ class RemoteModelInterfaceTest(parameterized.TestCase):
           ),
       }
 
-      # Mock time.perf_counter to control client_round_trip_ms
+      # Mock time.perf_counter for generate_content: 100.0s -> 101.0s (1000ms)
       with mock.patch("time.perf_counter", side_effect=[100.0, 101.0]):
         remote_model.query_model(observation)
+
+      assert remote_model.last_remote_inference_time_ms is not None
+      assert remote_model.last_network_overhead_ms is not None
+      assert remote_model.last_client_image_encode_ms is not None
+      assert remote_model.last_wire_transit_ms is not None
+      assert remote_model.last_client_processing_ms is not None
 
       # client_round_trip_ms = (101.0 - 100.0) * 1000 = 1000.0 ms
       # remote_inference_time = 500.0 ms
       # network_overhead = 1000.0 - 500.0 = 500.0 ms
-
-      self.assertEqual(remote_model.last_remote_inference_time_ms, 500.0)
-      self.assertEqual(remote_model.last_network_overhead_ms, 500.0)
+      # client_rpc_ms = 700.0 ms
+      # wire_transit_ms = 700.0 - 500.0 = 200.0 ms
+      # client_processing_ms = 1000.0 - 700.0 = 300.0 ms
+      self.assertAlmostEqual(remote_model.last_remote_inference_time_ms, 500.0)
+      self.assertAlmostEqual(remote_model.last_network_overhead_ms, 500.0)
+      self.assertAlmostEqual(remote_model.last_client_image_encode_ms, 100.0)
+      self.assertAlmostEqual(remote_model.last_wire_transit_ms, 200.0)
+      self.assertAlmostEqual(remote_model.last_client_processing_ms, 300.0)
 
   def test_latency_metrics_fallback_on_invalid_timestamps(self):
     FLAGS.api_key = "mock_test_key"

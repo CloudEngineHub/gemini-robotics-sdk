@@ -80,7 +80,7 @@ class AlohaEmbodiment(embodiment.Embodiment):
     """Instantiates a list of tools specific to the Aloha robot."""
     return [
         tool.Tool(
-            fn=fast_api_tools.FastApiGet(
+            fn=fast_api_tools.FastApiGet(  # pyrefly: ignore[bad-argument-type]
                 self._robot_server,
                 _Endpoints.RUN_INSTRUCTION.value,
                 ["instruction"],
@@ -122,7 +122,7 @@ class AlohaEmbodiment(embodiment.Embodiment):
             bus=bus,
         ),
         tool.Tool(
-            fn=fast_api_tools.FastApiGet(
+            fn=fast_api_tools.FastApiGet(  # pyrefly: ignore[bad-argument-type]
                 self._robot_server, _Endpoints.RESET.value, []
             ),
             declaration=types.FunctionDeclaration(
@@ -133,7 +133,7 @@ class AlohaEmbodiment(embodiment.Embodiment):
             bus=bus,
         ),
         tool.Tool(
-            fn=fast_api_tools.FastApiGet(
+            fn=fast_api_tools.FastApiGet(  # pyrefly: ignore[bad-argument-type]
                 self._robot_server, _Endpoints.STOP_INSTRUCTION.value, []
             ),
             declaration=types.FunctionDeclaration(
@@ -144,7 +144,7 @@ class AlohaEmbodiment(embodiment.Embodiment):
             bus=bus,
         ),
         tool.Tool(
-            fn=fast_api_tools.FastApiGet(
+            fn=fast_api_tools.FastApiGet(  # pyrefly: ignore[bad-argument-type]
                 self._robot_server, _Endpoints.OPEN_GRIPPERS.value, []
             ),
             declaration=types.FunctionDeclaration(
@@ -155,7 +155,7 @@ class AlohaEmbodiment(embodiment.Embodiment):
             bus=bus,
         ),
         tool.Tool(
-            fn=fast_api_tools.FastApiGet(
+            fn=fast_api_tools.FastApiGet(  # pyrefly: ignore[bad-argument-type]
                 self._robot_server, _Endpoints.SLEEP.value, []
             ),
             declaration=types.FunctionDeclaration(

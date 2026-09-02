@@ -119,7 +119,7 @@ class VersionNegotiationE2ETest(absltest.TestCase):
         'supported_protocols': ['json'],
         'min_client_version': '0.0.0',
     }
-    server = _start_server_with_info(port, server_info)
+    server = _start_server_with_info(port, server_info)  # pyrefly: ignore[bad-argument-type]
     try:
       channel = grpc.insecure_channel(f'localhost:{port}')
       result = genai_robotics._check_server_compatibility(
@@ -162,7 +162,7 @@ class VersionNegotiationE2ETest(absltest.TestCase):
         'supported_protocols': ['msgpack'],
         'min_client_version': '3.0.0',
     }
-    server = _start_server_with_info(port, server_info)
+    server = _start_server_with_info(port, server_info)  # pyrefly: ignore[bad-argument-type]
     try:
       channel = grpc.insecure_channel(f'localhost:{port}')
       with self.assertRaises(RuntimeError) as cm:
@@ -182,12 +182,12 @@ class VersionNegotiationE2ETest(absltest.TestCase):
         'supported_protocols': ['json'],
         'min_client_version': '0.0.0',
     }
-    server = _start_server_with_info(port, server_info)
+    server = _start_server_with_info(port, server_info)  # pyrefly: ignore[bad-argument-type]
     try:
       channel = grpc.insecure_channel(f'localhost:{port}')
       # Temporarily set a high min server version to trigger the warning.
       original = genai_robotics._MIN_SERVER_VERSION
-      genai_robotics._MIN_SERVER_VERSION = '1.0.0'
+      genai_robotics._MIN_SERVER_VERSION = '1.0.0'  # pyrefly: ignore[bad-assignment]
       try:
         with warnings.catch_warnings(record=True) as w:
           warnings.simplefilter('always')
@@ -254,7 +254,7 @@ class VersionNegotiationE2ETest(absltest.TestCase):
         'supported_protocols': ['json'],
         'min_client_version': '0.0.0',
     }
-    server = _start_server_with_info(port, server_info)
+    server = _start_server_with_info(port, server_info)  # pyrefly: ignore[bad-argument-type]
     try:
       channel = grpc.insecure_channel(f'localhost:{port}')
       # Handshake succeeds.

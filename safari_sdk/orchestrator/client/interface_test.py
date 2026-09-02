@@ -59,7 +59,7 @@ class InterfaceTest(absltest.TestCase):
       self.assertEqual(response.robot_id, "test_robot_id")
       self.assertLen(response.latest_robot_release_configs, 1)
       self.assertEqual(
-          response.latest_robot_release_configs[0].key, "test_key"
+          response.latest_robot_release_configs[0].key, "test_key"  # pyrefly: ignore[unsupported-operation]
       )
 
   def test_create_kv_msg_string(self):
@@ -75,7 +75,7 @@ class InterfaceTest(absltest.TestCase):
     self.assertEqual(
         kv_msg.type, interface.KV_MSG_TYPE.KV_MSG_VALUE_TYPE_STRING
     )
-    self.assertEqual(kv_msg.value.stringValue, "test_value")
+    self.assertEqual(kv_msg.value.stringValue, "test_value")  # pyrefly: ignore[missing-attribute]
 
   def test_create_kv_msg_int_list(self):
     interface_lib = interface.OrchestratorInterface(
@@ -90,7 +90,7 @@ class InterfaceTest(absltest.TestCase):
     self.assertEqual(
         kv_msg.type, interface.KV_MSG_TYPE.KV_MSG_VALUE_TYPE_INT_LIST
     )
-    self.assertEqual(kv_msg.value.intListValue, [1, 2, 3])
+    self.assertEqual(kv_msg.value.intListValue, [1, 2, 3])  # pyrefly: ignore[missing-attribute]
 
   def test_create_kv_msg_unsupported_type(self):
     interface_lib = interface.OrchestratorInterface(
@@ -2945,7 +2945,7 @@ class InterfaceTest(absltest.TestCase):
               artifactId="test_artifact_id",
               name="test_name",
               desc="test_description",
-              artifactObjectType="ARTIFACT_OBJECT_TYPE_IMAGE",
+              artifactObjectType="ARTIFACT_OBJECT_TYPE_IMAGE",  # pyrefly: ignore[bad-argument-type]
               commitTime="2025-01-01T00:00:00Z",
               tags=["tag1", "tag2"],
               version="1",

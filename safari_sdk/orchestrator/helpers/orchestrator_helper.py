@@ -233,8 +233,8 @@ class OrchestratorHelper:
     if self._interface is not None:
       self._interface.disconnect()
 
-    self._interface = self._interface_type(
-        robot_id=self._robot_id,
+    self._interface = self._interface_type(  # pyrefly: ignore[not-callable]
+        robot_id=self._robot_id,  # pyrefly: ignore[bad-argument-type]
         # TODO: Remove once users have migrated to job_type_code.
         job_type=self._job_type,
         job_type_codes=self._job_type_codes,
@@ -671,7 +671,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_STRING, value=value
@@ -682,7 +682,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_STRING_LIST, value=value
@@ -693,7 +693,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_INT, value=value
@@ -704,7 +704,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_INT_LIST, value=value
@@ -715,7 +715,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_FLOAT, value=value
@@ -726,7 +726,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_FLOAT_LIST, value=value
@@ -737,7 +737,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_BOOL, value=value
@@ -748,7 +748,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_BOOL_LIST, value=value
@@ -759,7 +759,7 @@ class OrchestratorHelper:
     if self._interface is None:
       if self._raise_error:
         raise ValueError(_ERROR_NO_ACTIVE_CONNECTION)
-      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)
+      return RESPONSE(error_message=_ERROR_NO_ACTIVE_CONNECTION)  # pyrefly: ignore[bad-return]
 
     return self._interface.create_kv_msg(
         key=key, kv_type=KV_MSG_TYPE.KV_MSG_VALUE_TYPE_JSON, value=value

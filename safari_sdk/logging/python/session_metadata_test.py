@@ -85,8 +85,9 @@ class MetadataUtilsTest(parameterized.TestCase):
       ),
   )
   def test_create_dtype_proto_for_valid_dtypes(self, dtype, expected_dtype):
+    spec = specs.Array(shape=(1,), dtype=dtype)
     self.assertEqual(
-        session_metadata_lib.create_dtype_proto(dtype), expected_dtype
+        session_metadata_lib.create_dtype_proto(spec), expected_dtype
     )
 
   @parameterized.named_parameters(
@@ -108,8 +109,9 @@ class MetadataUtilsTest(parameterized.TestCase):
       ),
   )
   def test_create_dtype_proto_raises_error_for_invalid_dtype(self, dtype):
+    spec = specs.Array(shape=(1,), dtype=dtype)
     with self.assertRaises(ValueError):
-      session_metadata_lib.create_dtype_proto(dtype)
+      session_metadata_lib.create_dtype_proto(spec)
 
   @parameterized.named_parameters(
       dict(

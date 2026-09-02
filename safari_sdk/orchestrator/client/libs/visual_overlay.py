@@ -67,12 +67,12 @@ class OrchestratorRenderer:
     self._overlay_x_size = scene_reference_image_data.rawImageWidth
     self._overlay_y_size = scene_reference_image_data.rawImageHeight
     self._ratio_ref_x = self._compute_image_conversion_ratio(
-        initial_size=scene_reference_image_data.renderedCanvasWidth,
-        desired_size=self._overlay_x_size,
+        initial_size=scene_reference_image_data.renderedCanvasWidth,  # pyrefly: ignore[bad-argument-type]
+        desired_size=self._overlay_x_size,  # pyrefly: ignore[bad-argument-type]
     )
     self._ratio_ref_y = self._compute_image_conversion_ratio(
-        initial_size=scene_reference_image_data.renderedCanvasHeight,
-        desired_size=self._overlay_y_size,
+        initial_size=scene_reference_image_data.renderedCanvasHeight,  # pyrefly: ignore[bad-argument-type]
+        desired_size=self._overlay_y_size,  # pyrefly: ignore[bad-argument-type]
     )
     # Assuming that the reference image used is the same size as the camera.
     # This will be rechecked when the user provides an base image to render.
@@ -139,7 +139,7 @@ class OrchestratorRenderer:
 
   def _adjust_overlay_scale_to_reference_image_size(self) -> None:
     """Sets whether to auto scale the overlay to the reference image size."""
-    pixel_size = self._overlay_x_size * self._overlay_y_size
+    pixel_size = self._overlay_x_size * self._overlay_y_size  # pyrefly: ignore[unsupported-operation]
     scale_factor = pixel_size / 1000000.0  # Scaling by megapixels.
 
     if scale_factor <= 1.0:
@@ -569,11 +569,11 @@ class OrchestratorRenderer:
     updated_image_size = self._overlay_image.size
     if current_image_size != updated_image_size:
       self._ratio_camera_x = self._compute_image_conversion_ratio(
-          initial_size=self._overlay_x_size,
+          initial_size=self._overlay_x_size,  # pyrefly: ignore[bad-argument-type]
           desired_size=updated_image_size[0],
       )
       self._ratio_camera_y = self._compute_image_conversion_ratio(
-          initial_size=self._overlay_y_size,
+          initial_size=self._overlay_y_size,  # pyrefly: ignore[bad-argument-type]
           desired_size=updated_image_size[1],
       )
       self._overlay_objects.clear()
@@ -753,118 +753,118 @@ class OrchestratorRenderer:
     overlay_text_label = ""
     if obj.overlayTextLabels and obj.overlayTextLabels.labels:
       overlay_text_label = obj.overlayTextLabels.labels[0].text
-    overlay_icon = obj.evaluationLocation.overlayIcon
+    overlay_icon = obj.evaluationLocation.overlayIcon  # pyrefly: ignore[missing-attribute]
     layer_order = (
         obj.evaluationLocation.layerOrder
-        if obj.evaluationLocation.layerOrder
+        if obj.evaluationLocation.layerOrder  # pyrefly: ignore[missing-attribute]
         else 0
     )
     rgb_hex_color_value = (
         obj.evaluationLocation.rgbHexColorValue
-        if obj.evaluationLocation.rgbHexColorValue
+        if obj.evaluationLocation.rgbHexColorValue  # pyrefly: ignore[missing-attribute]
         else "FF0000"
     )
 
     match overlay_icon:
       case work_unit.OverlayObjectIcon.OVERLAY_OBJECT_ICON_CIRCLE:
         x = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.x,
+            value=obj.evaluationLocation.location.coordinate.x,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_x,
             ratio_ref_to_camera=self._ratio_camera_x,
         )
         y = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.y,
+            value=obj.evaluationLocation.location.coordinate.y,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_y,
             ratio_ref_to_camera=self._ratio_camera_y,
         )
         self._overlay_objects.append(
             visual_overlay_icon.DrawCircleIcon(
-                object_id=object_id,
-                overlay_text_label=overlay_text_label,
-                rgb_hex_color_value=rgb_hex_color_value,
-                layer_order=layer_order,
+                object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                 x=x,
                 y=y,
             )
         )
       case work_unit.OverlayObjectIcon.OVERLAY_OBJECT_ICON_ARROW:
         x = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.x,
+            value=obj.evaluationLocation.location.coordinate.x,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_x,
             ratio_ref_to_camera=self._ratio_camera_x,
         )
         y = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.y,
+            value=obj.evaluationLocation.location.coordinate.y,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_y,
             ratio_ref_to_camera=self._ratio_camera_y,
         )
         self._overlay_objects.append(
             visual_overlay_icon.DrawArrowIcon(
-                object_id=object_id,
-                overlay_text_label=overlay_text_label,
-                rgb_hex_color_value=rgb_hex_color_value,
-                layer_order=layer_order,
+                object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                 x=x,
                 y=y,
-                rad=obj.evaluationLocation.location.direction.rad,
+                rad=obj.evaluationLocation.location.direction.rad,  # pyrefly: ignore[missing-attribute]
             )
         )
       case work_unit.OverlayObjectIcon.OVERLAY_OBJECT_ICON_SQUARE:
         x = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.x,
+            value=obj.evaluationLocation.location.coordinate.x,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_x,
             ratio_ref_to_camera=self._ratio_camera_x,
         )
         y = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.y,
+            value=obj.evaluationLocation.location.coordinate.y,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_y,
             ratio_ref_to_camera=self._ratio_camera_y,
         )
         self._overlay_objects.append(
             visual_overlay_icon.DrawSquareIcon(
-                object_id=object_id,
-                overlay_text_label=overlay_text_label,
-                rgb_hex_color_value=rgb_hex_color_value,
-                layer_order=layer_order,
+                object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                 x=x,
                 y=y,
             )
         )
       case work_unit.OverlayObjectIcon.OVERLAY_OBJECT_ICON_TRIANGLE:
         x = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.x,
+            value=obj.evaluationLocation.location.coordinate.x,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_x,
             ratio_ref_to_camera=self._ratio_camera_x,
         )
         y = self._scale_to_image_size(
-            value=obj.evaluationLocation.location.coordinate.y,
+            value=obj.evaluationLocation.location.coordinate.y,  # pyrefly: ignore[missing-attribute]
             ratio_ui_to_ref=self._ratio_ref_y,
             ratio_ref_to_camera=self._ratio_camera_y,
         )
         self._overlay_objects.append(
             visual_overlay_icon.DrawTriangleIcon(
-                object_id=object_id,
-                overlay_text_label=overlay_text_label,
-                rgb_hex_color_value=rgb_hex_color_value,
-                layer_order=layer_order,
+                object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                 x=x,
                 y=y,
             )
         )
       case work_unit.OverlayObjectIcon.OVERLAY_OBJECT_ICON_CONTAINER:
-        if obj.evaluationLocation.containerArea.circle:
+        if obj.evaluationLocation.containerArea.circle:  # pyrefly: ignore[missing-attribute]
           x = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.circle.center.x,
+              value=obj.evaluationLocation.containerArea.circle.center.x,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_x,
               ratio_ref_to_camera=self._ratio_camera_x,
           )
           y = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.circle.center.y,
+              value=obj.evaluationLocation.containerArea.circle.center.y,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_y,
               ratio_ref_to_camera=self._ratio_camera_y,
           )
           radius = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.circle.radius,
+              value=obj.evaluationLocation.containerArea.circle.radius,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=max(self._ratio_ref_x, self._ratio_ref_y),
               ratio_ref_to_camera=max(
                   self._ratio_camera_x, self._ratio_camera_y
@@ -873,42 +873,42 @@ class OrchestratorRenderer:
           )
           self._overlay_objects.append(
               visual_overlay_icon.DrawContainer(
-                  object_id=object_id,
-                  overlay_text_label=overlay_text_label,
-                  rgb_hex_color_value=rgb_hex_color_value,
-                  layer_order=layer_order,
+                  object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                  overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                  rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                  layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                   x=x,
                   y=y,
                   radius=radius,
               )
           )
-        elif obj.evaluationLocation.containerArea.box:
+        elif obj.evaluationLocation.containerArea.box:  # pyrefly: ignore[missing-attribute]
           x = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.box.x,
+              value=obj.evaluationLocation.containerArea.box.x,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_x,
               ratio_ref_to_camera=self._ratio_camera_x,
           )
           y = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.box.y,
+              value=obj.evaluationLocation.containerArea.box.y,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_y,
               ratio_ref_to_camera=self._ratio_camera_y,
           )
           w = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.box.w,
+              value=obj.evaluationLocation.containerArea.box.w,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_x,
               ratio_ref_to_camera=self._ratio_camera_x,
           )
           h = self._scale_to_image_size(
-              value=obj.evaluationLocation.containerArea.box.h,
+              value=obj.evaluationLocation.containerArea.box.h,  # pyrefly: ignore[missing-attribute]
               ratio_ui_to_ref=self._ratio_ref_y,
               ratio_ref_to_camera=self._ratio_camera_y,
           )
           self._overlay_objects.append(
               visual_overlay_icon.DrawContainer(
-                  object_id=object_id,
-                  overlay_text_label=overlay_text_label,
-                  rgb_hex_color_value=rgb_hex_color_value,
-                  layer_order=layer_order,
+                  object_id=object_id,  # pyrefly: ignore[bad-argument-type]
+                  overlay_text_label=overlay_text_label,  # pyrefly: ignore[bad-argument-type]
+                  rgb_hex_color_value=rgb_hex_color_value,  # pyrefly: ignore[bad-argument-type]
+                  layer_order=layer_order,  # pyrefly: ignore[bad-argument-type]
                   x=x,
                   y=y,
                   w=w,

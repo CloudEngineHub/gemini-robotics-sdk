@@ -176,7 +176,7 @@ class OrchestratorInterface:
       )
 
     if not self._robot_id:
-      self._robot_id = response.robot_id
+      self._robot_id = response.robot_id  # pyrefly: ignore[bad-assignment]
 
     self._robot_job_lib = robot_job.OrchestratorRobotJob(
         connection=self._connection,
@@ -755,37 +755,37 @@ class OrchestratorInterface:
     match kv_type:
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_STRING:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(stringValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(stringValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_STRING_LIST:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(stringListValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(stringListValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_INT:
-        return KV_MSG(key=key, type=kv_type, value=KV_MSG_VALUE(intValue=value))
+        return KV_MSG(key=key, type=kv_type, value=KV_MSG_VALUE(intValue=value))  # pyrefly: ignore[bad-argument-type]
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_INT_LIST:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(intListValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(intListValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_FLOAT:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(floatValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(floatValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_FLOAT_LIST:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(floatListValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(floatListValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_BOOL:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(boolValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(boolValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_BOOL_LIST:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(boolListValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(boolListValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case KV_MSG_TYPE.KV_MSG_VALUE_TYPE_JSON:
         return KV_MSG(
-            key=key, type=kv_type, value=KV_MSG_VALUE(jsonValue=value)
+            key=key, type=kv_type, value=KV_MSG_VALUE(jsonValue=value)  # pyrefly: ignore[bad-argument-type]
         )
       case _:
         raise ValueError(f"Unsupported KV message type: {kv_type}")

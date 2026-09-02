@@ -119,8 +119,8 @@ class NoPolicy(gdmr_policy.Policy[np.ndarray]):
   def step(
       self,
       timestep: dm_env.TimeStep,
-      prev_state: gdmr_types.StateStructure[np.ndarray],
-  ) -> tuple[
+      prev_state: gdmr_types.StateStructure[np.ndarray],  # pyrefly: ignore[invalid-type-var]
+  ) -> tuple[  # pyrefly: ignore[invalid-type-var]
       tuple[
           gdmr_types.ActionType,
           gdmr_types.ExtraOutputStructure[np.ndarray],
@@ -132,12 +132,12 @@ class NoPolicy(gdmr_policy.Policy[np.ndarray]):
   @override
   def initial_state(
       self,
-  ) -> gdmr_types.StateStructure[np.ndarray]:
+  ) -> gdmr_types.StateStructure[np.ndarray]:  # pyrefly: ignore[invalid-type-var]
     """Returns the policy initial state."""
     return self._dummy_state
 
   @override
-  def step_spec(self, timestep_spec: gdmr_types.TimeStepSpec) -> tuple[
+  def step_spec(self, timestep_spec: gdmr_types.TimeStepSpec) -> tuple[  # pyrefly: ignore[invalid-type-var]
       tuple[gdmr_types.ActionSpec, gdmr_types.ExtraOutputSpec],
       gdmr_types.StateSpec,
   ]:
@@ -188,7 +188,7 @@ def main(argv: Sequence[str]) -> None:
     )
   task_class, kwargs = task_suite.TASK_FACTORIES[_TASK_NAME.value]
   task = task_class(
-      cameras=_ALOHA_CAMERAS, control_timestep=_DT, update_interval=25, **kwargs
+      cameras=_ALOHA_CAMERAS, control_timestep=_DT, update_interval=25, **kwargs  # pyrefly: ignore[bad-argument-type]
   )
   env = composer.Environment(
       task=task,
@@ -206,7 +206,7 @@ def main(argv: Sequence[str]) -> None:
   # runloop.
   timestep_spec = copy.deepcopy(env.timestep_spec())
   assert isinstance(timestep_spec.observation, dict)
-  timestep_spec.observation.update({'instruction': specs.StringArray(shape=())})
+  timestep_spec.observation.update({'instruction': specs.StringArray(shape=())})  # pyrefly: ignore[no-matching-overload]
 
   # Instantiate the policy.
   if _POLICY.value == 'no_policy':
@@ -218,16 +218,16 @@ def main(argv: Sequence[str]) -> None:
           serve_id=_SERVE_ID,
           robotics_api_connection=gemini_robotics_constants.RoboticsApiConnectionType.LOCAL,
           task_instruction_key='instruction',
-          proprioceptive_observation_keys=_ALOHA_JOINTS.keys(),
-          image_observation_keys=_ALOHA_CAMERAS.keys(),
+          proprioceptive_observation_keys=_ALOHA_JOINTS.keys(),  # pyrefly: ignore[bad-argument-type]
+          image_observation_keys=_ALOHA_CAMERAS.keys(),  # pyrefly: ignore[bad-argument-type]
           image_compression_jpeg_quality=95,
       )
       policy = gemini_robotics_policy.GeminiRoboticsPolicy(
           model_interface=remote_model,
           serve_id=_SERVE_ID,
           task_instruction_key='instruction',
-          image_observation_keys=_ALOHA_CAMERAS.keys(),
-          proprioceptive_observation_keys=_ALOHA_JOINTS.keys(),
+          image_observation_keys=_ALOHA_CAMERAS.keys(),  # pyrefly: ignore[bad-argument-type]
+          proprioceptive_observation_keys=_ALOHA_JOINTS.keys(),  # pyrefly: ignore[bad-argument-type]
           min_replan_interval=25,
           inference_mode=gemini_robotics_constants.InferenceMode.SYNCHRONOUS,
           robotics_api_connection=gemini_robotics_constants.RoboticsApiConnectionType.LOCAL,

@@ -21,6 +21,7 @@ import dataclasses
 import logging
 import threading
 import time
+from typing import Any
 
 import dm_env
 from dm_env import specs
@@ -195,7 +196,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
   @override
   def initial_state(
       self,
-  ) -> gdmr_types.StateStructure[np.ndarray]:
+  ) -> gdmr_types.StateStructure[np.ndarray]:  # pyrefly: ignore[invalid-type-var]
     """Resets the policy and returns the policy initial state."""
     if self._action_spec is None:
       raise ValueError('Cannot call initial_state before calling step_spec.')
@@ -220,8 +221,8 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
   def step(
       self,
       timestep: dm_env.TimeStep,
-      prev_state: gdmr_types.StateStructure[np.ndarray],
-  ) -> tuple[
+      prev_state: gdmr_types.StateStructure[np.ndarray],  # pyrefly: ignore[invalid-type-var]
+  ) -> tuple[  # pyrefly: ignore[invalid-type-var]
       tuple[
           gdmr_types.ActionType,
           gdmr_types.ExtraOutputStructure[np.ndarray],
@@ -257,16 +258,16 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     else:
       action = self._step_sync(timestep)
 
-    return (action, self._last_extra), self._dummy_state
+    return (action, self._last_extra), self._dummy_state  # pyrefly: ignore[bad-return]
 
   @override
-  def step_spec(self, timestep_spec: gdmr_types.TimeStepSpec) -> tuple[
+  def step_spec(self, timestep_spec: gdmr_types.TimeStepSpec) -> tuple[  # pyrefly: ignore[invalid-type-var]
       tuple[gdmr_types.ActionSpec, gdmr_types.ExtraOutputSpec],
       gdmr_types.StateSpec,
   ]:
     """Returns the spec of the ((action, extra), state) from `step` method."""
 
-    observation_spec = dict(timestep_spec.observation)
+    observation_spec = dict(timestep_spec.observation)  # pyrefly: ignore[no-matching-overload]
 
     # Add additional observations specs provided by the users.
     extra_specs = {}
@@ -290,7 +291,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
 
     # Validate that the timestep_spec contains the required keys.
     if self._string_observations_keys and not all(
-        string_obs_key in observation_spec
+        string_obs_key in observation_spec  # pyrefly: ignore[not-iterable]
         for string_obs_key in self._string_observations_keys
     ):
       raise ValueError(
@@ -300,7 +301,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
       )
 
     if self._image_observation_keys and not all(
-        image_obs_key in observation_spec
+        image_obs_key in observation_spec  # pyrefly: ignore[not-iterable]
         for image_obs_key in self._image_observation_keys
     ):
       raise ValueError(
@@ -309,7 +310,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
           f' {observation_spec}'
       )
     if self._proprioceptive_observation_keys and not all(
-        proprio_obs_key in observation_spec
+        proprio_obs_key in observation_spec  # pyrefly: ignore[not-iterable]
         for proprio_obs_key in self._proprioceptive_observation_keys
     ):
       raise ValueError(
@@ -336,7 +337,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
         ),
     }
 
-    return (
+    return (  # pyrefly: ignore[bad-return]
         self._action_spec,
         extra_spec,
     ), specs.Array(shape=(), dtype=np.float32)
@@ -351,7 +352,7 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     )
 
     # Some models require a non-empty task instruction to be present
-    observation_spec = dict(self._timestep_spec.observation)
+    observation_spec = dict(self._timestep_spec.observation)  # pyrefly: ignore[no-matching-overload]
     non_empty_strings = {
         key: np.array('non empty string', dtype=np.dtypes.StringDType())  # pytype: disable=module-attr
         for key, spec in observation_spec.items()
@@ -584,36 +585,65 @@ class GeminiRoboticsPolicy(gdmr_policy.Policy[np.ndarray]):
     """Returns the query statistics from the model."""
     remote_time = getattr(self._model, 'last_remote_inference_time_ms', None)
     network_time = getattr(self._model, 'last_network_overhead_ms', None)
-    valid_remote = isinstance(remote_time, (int, float))
-    valid_network = isinstance(network_time, (int, float))
-
-    logging.info(
-        'Inference: total=%.1fms, remote=%.1fms, network=%.1fms',
-        query_duration_ms,
-        remote_time if valid_remote else -1.0,
-        network_time if valid_network else -1.0,
+    wire_transit_time = getattr(self._model, 'last_wire_transit_ms', None)
+    client_processing_time = getattr(
+        self._model, 'last_client_processing_ms', None
+    )
+    image_encode_time = getattr(
+        self._model, 'last_client_image_encode_ms', None
     )
 
+    valid_remote = isinstance(remote_time, (int, float))
+    valid_wire = isinstance(wire_transit_time, (int, float))
+    valid_client_proc = isinstance(client_processing_time, (int, float))
+
+    logging.info(
+        'Inference: total=%.1fms, remote=%.1fms, wire=%.1fms,'
+        ' client_proc=%.1fms (img_encode=%s)',
+        query_duration_ms,
+        remote_time if valid_remote else -1.0,
+        wire_transit_time if valid_wire else -1.0,
+        client_processing_time if valid_client_proc else -1.0,
+        (
+            f'{image_encode_time:.1f}ms'
+            if isinstance(image_encode_time, (int, float))
+            else 'N/A'
+        ),
+    )
+
+    def _to_arr(val: Any) -> np.ndarray:
+      if isinstance(val, (int, float)):
+        return np.array(val, dtype=np.float32)
+      return np.array(-1.0, dtype=np.float32)
+
     extra = {
+        # Total time from query start to query return on the robot client.
         'inference_total_ms': np.array(query_duration_ms, dtype=np.float32),
-        'remote_inference_ms': np.array(
-            remote_time if valid_remote else -1.0, dtype=np.float32
-        ),
-        'network_overhead_ms': np.array(
-            network_time if valid_network else -1.0, dtype=np.float32
-        ),
+        # Remote model execution duration inside the cloud backend.
+        'remote_inference_ms': _to_arr(remote_time),
+        # Pure physical wire transit RTT excluding server compute.
+        'client_wire_transit_ms': _to_arr(wire_transit_time),
+        # Client workstation CPU processing time (image encode, prep, parsing).
+        'client_processing_ms': _to_arr(client_processing_time),
+        # Client CPU time spent JPEG compressing camera observation images.
+        'client_image_encode_ms': _to_arr(image_encode_time),
+        # Legacy aggregate non-server overhead (total - remote).
+        'network_overhead_ms': _to_arr(network_time),
     }
 
     return extra
 
   def _get_empty_query_stats_dict(self) -> dict[str, np.ndarray]:
     """Returns a dictionary with sentinel inference latency metrics."""
+    sentinel = np.array(-1.0, dtype=np.float32)
     extra = {
-        'inference_total_ms': np.array(-1.0, dtype=np.float32),
-        'remote_inference_ms': np.array(-1.0, dtype=np.float32),
-        'network_overhead_ms': np.array(-1.0, dtype=np.float32),
+        'inference_total_ms': sentinel,
+        'remote_inference_ms': sentinel,
+        'client_wire_transit_ms': sentinel,
+        'client_processing_ms': sentinel,
+        'client_image_encode_ms': sentinel,
+        'network_overhead_ms': sentinel,
     }
-
     return extra
 
   def _get_empty_extra_dict(self) -> dict[str, np.ndarray]:

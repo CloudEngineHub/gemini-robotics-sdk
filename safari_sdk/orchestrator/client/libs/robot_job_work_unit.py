@@ -126,7 +126,7 @@ class OrchestratorRobotJobWorkUnit:
 
   def disconnect(self) -> None:
     """Clears current connection to the orchestrator server."""
-    self._connection = None
+    self._connection = None  # pyrefly: ignore[bad-assignment]
 
   def set_robot_job_info(
       self, robot_job_id: str | None, launch_command: str | None
@@ -192,7 +192,7 @@ class OrchestratorRobotJobWorkUnit:
       )
 
     as_json = json.dumps(response)
-    self._current_work_unit = work_unit.WorkUnitResponse.from_json(as_json)
+    self._current_work_unit = work_unit.WorkUnitResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
 
     if not self._current_work_unit.workUnit:
       self._current_work_unit = None
@@ -447,7 +447,7 @@ class OrchestratorRobotJobWorkUnit:
         "tracer": tracer,
     }
     if success_score is not None:
-      body["success_score"] = {
+      body["success_score"] = {  # pyrefly: ignore[bad-assignment]
           "score": success_score,
           "definition": (
               success_score_definition if success_score_definition else ""
@@ -486,7 +486,7 @@ class OrchestratorRobotJobWorkUnit:
             "was_displayed": response.wasDisplayed,
         }
         responses.append(question)
-      body["questions"] = responses
+      body["questions"] = responses  # pyrefly: ignore[bad-assignment]
 
     if client_overrides:
       overrides = []
@@ -525,7 +525,7 @@ class OrchestratorRobotJobWorkUnit:
               "type": override.type.num_value(),
               "value": kv_value,
           })
-      body["client_overrides"] = overrides
+      body["client_overrides"] = overrides  # pyrefly: ignore[bad-assignment]
 
     try:
       self._connection.orchestrator().completeWorkUnit(body=body).execute()
@@ -599,7 +599,7 @@ class OrchestratorRobotJobWorkUnit:
       )
 
     as_json = json.dumps(response)
-    current_work_unit = work_unit.WorkUnitResponse.from_json(as_json)
+    current_work_unit = work_unit.WorkUnitResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
 
     if not current_work_unit.workUnit:
       return _RESPONSE(

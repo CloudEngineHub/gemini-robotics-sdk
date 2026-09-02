@@ -203,7 +203,7 @@ class FastApiStream(metaclass=abc.ABCMeta):
     Yields:
         An event read from the stream.
     """
-    yield
+    yield  # pyrefly: ignore[invalid-yield]
 
   async def stream(self) -> types.EventStream[types.Event]:
     """Event generator for a stream of data."""

@@ -85,7 +85,7 @@ def _postprocess_event(
           type=event_type,
           source=source,
           data=data,
-          metadata=metadata,
+          metadata=metadata,  # pyrefly: ignore[bad-argument-type]
       )
 
 
@@ -642,7 +642,7 @@ class ExternalControllerFastAPIServer:
                 type=typed_event_type,
                 source=event_bus.EventSource.EXTERNAL_CONTROLLER,
                 data=data,
-                metadata=metadata,
+                metadata=metadata,  # pyrefly: ignore[bad-argument-type]
             )
         )
         return {"message": "Published event to the event bus."}

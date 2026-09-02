@@ -87,7 +87,7 @@ class OrchestratorRobotJob:
 
   def disconnect(self) -> None:
     """Clears current connection to the orchestrator server."""
-    self._connection = None
+    self._connection = None  # pyrefly: ignore[bad-assignment]
 
   def get_current_robot_job(self) -> _RESPONSE:
     """Gets the current robot job."""
@@ -140,7 +140,7 @@ class OrchestratorRobotJob:
       )
 
     as_json = json.dumps(response)
-    self._current_robot_job = robot_job.RobotJobResponse.from_json(as_json)
+    self._current_robot_job = robot_job.RobotJobResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
 
     if not self._current_robot_job:
       self._current_robot_job = None

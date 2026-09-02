@@ -106,7 +106,7 @@ class RunInstructionForDurationTool(tool.Tool):
         parameters=function_declaration.parameters,
     )
     super().__init__(
-        fn=self.run_instruction_for_duration,
+        fn=self.run_instruction_for_duration,  # pyrefly: ignore[bad-argument-type]
         declaration=declaration,
         bus=bus,
     )

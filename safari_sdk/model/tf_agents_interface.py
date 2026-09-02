@@ -346,7 +346,7 @@ class BoundedArraySpec(ArraySpec):
     super(BoundedArraySpec, self).__init__(shape, dtype, name)
 
     try:
-      np.broadcast_to(minimum, shape=shape)
+      np.broadcast_to(minimum, shape=shape)  # pyrefly: ignore[no-matching-overload]
     except ValueError as numpy_exception:
       raise ValueError(  # pylint: disable=raise-missing-from
           'minimum is not compatible with shape. Message: {!r}.'.format(
@@ -355,7 +355,7 @@ class BoundedArraySpec(ArraySpec):
       )
 
     try:
-      np.broadcast_to(maximum, shape=shape)
+      np.broadcast_to(maximum, shape=shape)  # pyrefly: ignore[no-matching-overload]
     except ValueError as numpy_exception:
       raise ValueError(  # pylint: disable=raise-missing-from
           'maximum is not compatible with shape. Message: {!r}.'.format(
@@ -469,7 +469,7 @@ class BoundedArraySpec(ArraySpec):
         and np.all(array <= self.maximum)
     )
 
-  def replace(  # pylint: disable=arguments-renamed
+  def replace(  # pylint: disable=arguments-renamed  # pyrefly: ignore[bad-override]
       self, shape=None, dtype=None, minimum=None, maximum=None, name=None
   ):
     shape = self.shape if shape is None else shape
@@ -506,11 +506,11 @@ Nested = Union[Tnest, Iterable[Trecursive], Mapping[Text, Trecursive]]
 # NestedDistribution = Nested[
 #     tfp.distributions.Distribution, 'NestedDistribution'
 # ]
-NestedTensorSpec = Nested[TensorSpec, 'NestedTensorSpec']
-NestedArraySpec = Nested[ArraySpec, 'NestedArraySpec']
+NestedTensorSpec = Nested[TensorSpec, 'NestedTensorSpec']  # pyrefly: ignore[not-a-type]
+NestedArraySpec = Nested[ArraySpec, 'NestedArraySpec']  # pyrefly: ignore[not-a-type]
 NestedSpec = Union[NestedTensorSpec, NestedArraySpec]
-NestedTensor = Nested[Tensor, 'NestedTensor']
-NestedArray = Nested[Array, 'NestedArray']
+NestedTensor = Nested[Tensor, 'NestedTensor']  # pyrefly: ignore[not-a-type]
+NestedArray = Nested[Array, 'NestedArray']  # pyrefly: ignore[not-a-type]
 NestedSpecTensorOrArray = Union[NestedSpec, NestedTensor, NestedArray]
 Spec = Union[TensorSpec, ArraySpec]
 SpecTensorOrArray = Union[Spec, Tensor, Array]
@@ -617,17 +617,17 @@ class TimeStep(
   def is_first(self) -> Bool:
     if tf.is_tensor(self.step_type):
       return tf.equal(self.step_type, StepType.FIRST)
-    return np.equal(self.step_type, StepType.FIRST)
+    return np.equal(self.step_type, StepType.FIRST)  # pyrefly: ignore[no-matching-overload]
 
   def is_mid(self) -> Bool:
     if tf.is_tensor(self.step_type):
       return tf.equal(self.step_type, StepType.MID)
-    return np.equal(self.step_type, StepType.MID)
+    return np.equal(self.step_type, StepType.MID)  # pyrefly: ignore[no-matching-overload]
 
   def is_last(self) -> Bool:
     if tf.is_tensor(self.step_type):
       return tf.equal(self.step_type, StepType.LAST)
-    return np.equal(self.step_type, StepType.LAST)
+    return np.equal(self.step_type, StepType.LAST)  # pyrefly: ignore[no-matching-overload]
 
   def __hash__(self):
     # TODO: Explore performance impact and consider converting
@@ -683,7 +683,7 @@ def _get_np_dtype(spec):
   dtype = spec.dtype
   if isinstance(dtype, tf.dtypes.DType):
     dtype = dtype.as_numpy_dtype()
-  return np.dtype(dtype)
+  return np.dtype(dtype)  # pyrefly: ignore[no-matching-overload]
 
 
 def transition(
@@ -719,7 +719,7 @@ def transition(
   first_observation = tf.nest.flatten(observation)[0]
   if not tf.is_tensor(first_observation):
     if outer_dims is not None:
-      step_type = np.tile(StepType.MID, outer_dims)
+      step_type = np.tile(StepType.MID, outer_dims)  # pyrefly: ignore[no-matching-overload]
       discount = _as_array(discount)
       return TimeStep(step_type, reward, discount, observation)
     # Infer the batch size.
@@ -809,7 +809,7 @@ def time_step_spec(
       )
   if isinstance(first_observation_spec, tf.TypeSpec):
     return TimeStep(
-        step_type=TensorSpec([], tf.int32, name='step_type'),
+        step_type=TensorSpec([], tf.int32, name='step_type'),  # pyrefly: ignore[not-callable]
         reward=reward_spec or tf.TensorSpec([], tf.float32, name='reward'),
         # BoundedTensorSpec changed to TensorSpec to avoid a dependency on
         # private TF internals.
@@ -817,7 +817,7 @@ def time_step_spec(
         # discount=BoundedTensorSpec(
         #     [], tf.float32, minimum=0.0, maximum=1.0, name='discount'
         # ),
-        discount=TensorSpec([], tf.float32, name='discount'),
+        discount=TensorSpec([], tf.float32, name='discount'),  # pyrefly: ignore[not-callable]
         observation=observation_spec,
     )
   return TimeStep(

@@ -441,8 +441,8 @@ class ThinkingManagerTest(parameterized.TestCase):
       for m in manager._managers:
         m.reset = mock.Mock()
       manager.reset()
-      manager._managers[0].reset.assert_called_once()
-      manager._managers[1].reset.assert_called_once()
+      manager._managers[0].reset.assert_called_once()  # pyrefly: ignore[missing-attribute]
+      manager._managers[1].reset.assert_called_once()  # pyrefly: ignore[missing-attribute]
 
   def test_multi_thinking_manager_spec(self):
     strat1 = (

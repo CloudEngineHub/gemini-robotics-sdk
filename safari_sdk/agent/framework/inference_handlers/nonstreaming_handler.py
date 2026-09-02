@@ -392,7 +392,7 @@ class NonStreamingHandler(abc.ABC):
             )
             raise
 
-        if not is_retriable_exception(e):
+        if not is_retriable_exception(e):  # pyrefly: ignore[bad-argument-type]
           logging.error("Generate failed with non-retriable error: %s", e)
           raise
         last_exception = e
@@ -422,7 +422,7 @@ class NonStreamingHandler(abc.ABC):
               kwargs.get("timeout", "N/A"),
           )
 
-    raise last_exception
+    raise last_exception  # pyrefly: ignore[bad-raise]
 
   def _clear_image_state(self) -> None:
     self._image_buffer = []
@@ -678,7 +678,7 @@ class NonStreamingHandler(abc.ABC):
     try:
       tool_response = event.data
       if isinstance(tool_response, types.LiveClientToolResponse):
-        for fn_response in tool_response.function_responses:
+        for fn_response in tool_response.function_responses:  # pyrefly: ignore[not-iterable]
           await self._pending_tool_results.put(fn_response)
     except Exception as e:  # pylint: disable=broad-exception-caught
       logging.error("Error handling tool result: %s", e)
@@ -763,7 +763,7 @@ class NonStreamingHandler(abc.ABC):
         if self._include_stream_names and blob.display_name:
           image_parts.append(types.Part.from_text(text=blob.display_name))
         image_parts.append(
-            types.Part.from_bytes(data=blob.data, mime_type="image/jpeg")
+            types.Part.from_bytes(data=blob.data, mime_type="image/jpeg")  # pyrefly: ignore[bad-argument-type]
         )
       images_count = len(images_for_fr)
 
@@ -835,7 +835,7 @@ class NonStreamingHandler(abc.ABC):
                     data=stitched_data,
                 )
             ),
-            self._loop,
+            self._loop,  # pyrefly: ignore[bad-argument-type]
         )
         if len(self._stitched_frames) > self._image_pruning_trigger_amount:
           self._stitched_frames = self._stitched_frames[

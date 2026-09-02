@@ -62,7 +62,7 @@ class OrchestratorRobotEvent:
 
   def disconnect(self) -> None:
     """Clears current connection to the orchestrator server."""
-    self._connection = None
+    self._connection = None  # pyrefly: ignore[bad-assignment]
 
   def add_robot_event(
       self,
@@ -125,7 +125,7 @@ class OrchestratorRobotEvent:
 
     as_json = json.dumps(response)
     create_robot_event_response = (
-        robot_event.CreateRobotEventResponse.from_json(as_json)
+        robot_event.CreateRobotEventResponse.from_json(as_json)  # pyrefly: ignore[missing-attribute]
     )
     if not create_robot_event_response.eventId:
       return _RESPONSE(

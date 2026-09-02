@@ -194,7 +194,7 @@ class Agent(metaclass=abc.ABCMeta):
     # events when the tool is called.
     tool_call_event_handler.ToolCallEventHandler(
         bus=bus,
-        tool_dict={tool.declaration.name: tool for tool in self._all_tools},
+        tool_dict={tool.declaration.name: tool for tool in self._all_tools},  # pyrefly: ignore[bad-argument-type]
     )
 
     # Create the handler based on streaming mode.
@@ -258,8 +258,8 @@ class Agent(metaclass=abc.ABCMeta):
         config=self._config,
         live_config=self._create_live_api_config(),
         camera_names=self._embodiment.camera_stream_names,
-        stream_name_to_camera_name=self._stream_name_to_camera_name,
-        http_options=self._http_options,
+        stream_name_to_camera_name=self._stream_name_to_camera_name,  # pyrefly: ignore[bad-argument-type]
+        http_options=self._http_options,  # pyrefly: ignore[bad-argument-type]
         ignore_image_inputs=self._ignore_vision_inputs,
     )
 
@@ -358,16 +358,16 @@ class Agent(metaclass=abc.ABCMeta):
 
     return genai_types.LiveConnectConfigDict(
         system_instruction=self._system_prompt,
-        tools=tools,
+        tools=tools,  # pyrefly: ignore[bad-argument-type]
         response_modalities=[response_modality],
-        realtime_input_config=genai_types.RealtimeInputConfig(
+        realtime_input_config=genai_types.RealtimeInputConfig(  # pyrefly: ignore[bad-argument-type]
             turn_coverage=turn_coverage,
         ),
-        input_audio_transcription=input_audio_transcription,
-        output_audio_transcription=output_audio_transcription,
-        speech_config=speech_config,
+        input_audio_transcription=input_audio_transcription,  # pyrefly: ignore[bad-argument-type]
+        output_audio_transcription=output_audio_transcription,  # pyrefly: ignore[bad-argument-type]
+        speech_config=speech_config,  # pyrefly: ignore[bad-argument-type]
         media_resolution=genai_types.MediaResolution.MEDIA_RESOLUTION_MEDIUM,
-        context_window_compression=context_window_compression,
+        context_window_compression=context_window_compression,  # pyrefly: ignore[bad-argument-type]
     )
 
   # ---------------------------------------------------------------------------
@@ -385,8 +385,8 @@ class Agent(metaclass=abc.ABCMeta):
         tools=tools,
         tool_config=tool_config,
         camera_names=self._embodiment.camera_stream_names,
-        stream_name_to_camera_name=self._stream_name_to_camera_name,
-        http_options=self._http_options,
+        stream_name_to_camera_name=self._stream_name_to_camera_name,  # pyrefly: ignore[bad-argument-type]
+        http_options=self._http_options,  # pyrefly: ignore[bad-argument-type]
         ignore_image_inputs=self._ignore_vision_inputs,
         temperature=self._config.agent_temperature,
         max_output_tokens=self._config.agent_max_output_tokens,

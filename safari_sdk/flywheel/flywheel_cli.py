@@ -684,9 +684,9 @@ class FlywheelCli:
           " --max_episodes limits the number of episodes."
       )
     if _ONLY_SUCCESSFUL_EPISODES.value:
-      training_data_filters["only_successful_episodes"] = True
+      training_data_filters["only_successful_episodes"] = True  # pyrefly: ignore[bad-assignment]
     if _MAX_EPISODES.value is not None:
-      training_data_filters["max_episode_count"] = _MAX_EPISODES.value
+      training_data_filters["max_episode_count"] = _MAX_EPISODES.value  # pyrefly: ignore[bad-assignment]
 
       if _TRAINING_RECIPE.value in (
           "gemini_robotics_on_device_v1",
@@ -702,7 +702,7 @@ class FlywheelCli:
         else:
           print(f"Using provided seed: {seed}")
 
-        training_data_filters["seed"] = seed
+        training_data_filters["seed"] = seed  # pyrefly: ignore[bad-assignment]
 
     if _INCLUDE_TAGS.value and _EXCLUDE_TAGS.value:
       overlap = set(_INCLUDE_TAGS.value) & set(_EXCLUDE_TAGS.value)
@@ -719,7 +719,7 @@ class FlywheelCli:
 
     body |= {
         "training_data_filters": training_data_filters,
-        "training_type": _RECIPE_TO_TYPE_MAP[_TRAINING_RECIPE.value],
+        "training_type": _RECIPE_TO_TYPE_MAP[_TRAINING_RECIPE.value],  # pyrefly: ignore[bad-index]
         "tracer": time.time_ns(),
     }
     if _TRAINING_RECIPE.value in (
@@ -1324,7 +1324,7 @@ class FlywheelCli:
     filename = _resolve_download_path(filename, default_full_path)
     _download_url_to_file(uri, filename)
 
-    if "docker" in artifact_id:
+    if "docker" in artifact_id:  # pyrefly: ignore[not-iterable]
       load_docker_image = input(
           "\n> This artifact appears to be a docker image. Load it? (y/n): "
       )

@@ -183,7 +183,7 @@ class McapMessageWriter:
     """
     current_thread = self._log_writer_thread
     if current_thread and current_thread.is_alive():
-      self._message_queue.put(_SENTINEL)
+      self._message_queue.put(_SENTINEL)  # pyrefly: ignore[bad-argument-type]
       current_thread.join(timeout=timeout_seconds)  # Wait for thread to finish
     recorded_exception = self._worker_thread_exception
     self._log_writer_thread = None

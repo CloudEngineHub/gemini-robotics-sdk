@@ -586,7 +586,7 @@ class MultiThinkingManager(
 
   @override
   @property
-  def last_thinking_response(self) -> str | None:
+  def last_thinking_response(self) -> str | None:  # pyrefly: ignore[bad-override]
     """Returns the latest thinking string."""
     return self._last_thinking_response_value
 

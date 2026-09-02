@@ -426,6 +426,7 @@ class WorkUnitResponseTest(absltest.TestCase):
         stage="WORK_UNIT_STAGE_QUEUED_TO_ROBOT",
         outcome="WORK_UNIT_OUTCOME_UNSPECIFIED",
         note="test_note",
+        tags=["test_tag_1", "test_tag_2"],
     )
     self.assertEqual(response.robotJobId, "test_robot_job_id")
     self.assertEqual(response.workUnitId, "test_work_unit_id")
@@ -440,6 +441,7 @@ class WorkUnitResponseTest(absltest.TestCase):
         work_unit.WorkUnitOutcome.WORK_UNIT_OUTCOME_UNSPECIFIED,
     )
     self.assertEqual(response.note, "test_note")
+    self.assertEqual(response.tags, ["test_tag_1", "test_tag_2"])
 
   def test_response_post_init_as_enum(self):
     response = work_unit.WorkUnit(
@@ -477,6 +479,7 @@ class WorkUnitResponseTest(absltest.TestCase):
         work_unit.WorkUnitOutcome.WORK_UNIT_OUTCOME_UNSPECIFIED
     )
     self.assertIsNone(response.note)
+    self.assertIsNone(response.tags)
 
 
 if __name__ == "__main__":

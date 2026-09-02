@@ -112,7 +112,7 @@ class McapLerobotLoggerTest(absltest.TestCase):
         "task": "test_task",
         "timestamp": 0.0,
     }
-    logger.record_step(step_data, timestamp_ns=123)
+    logger.record_step(step_data, timestamp_ns=123)  # pyrefly: ignore[bad-argument-type]
 
     mock_logger_instance.reset.assert_called_once()
     args, _ = mock_logger_instance.reset.call_args
@@ -140,7 +140,7 @@ class McapLerobotLoggerTest(absltest.TestCase):
       )
 
     features = FakeLeRobotDataset(1, 1).features
-    features[f"observation.{_TEST_PROPRIO_KEY}"]["shape"] = []
+    features[f"observation.{_TEST_PROPRIO_KEY}"]["shape"] = []  # pyrefly: ignore[unsupported-operation]
 
     with self.assertRaisesRegex(
         ValueError,
@@ -212,7 +212,7 @@ class McapLerobotLoggerTest(absltest.TestCase):
 
     # Missing shape for observation feature
     dataset = FakeLeRobotDataset(num_episodes=1, steps_per_episode=1)
-    dataset.features[f"observation.{_TEST_IMAGE_KEY}"]["shape"] = []
+    dataset.features[f"observation.{_TEST_IMAGE_KEY}"]["shape"] = []  # pyrefly: ignore[unsupported-operation]
 
     with self.assertRaisesRegex(
         ValueError,

@@ -79,7 +79,7 @@ class RunInstructionUntilDoneTool(tool.Tool):
   ):
     declaration = function_declaration
     super().__init__(
-        fn=self.run_instruction_until_done,
+        fn=self.run_instruction_until_done,  # pyrefly: ignore[bad-argument-type]
         declaration=declaration,
         bus=bus,
     )
@@ -111,7 +111,7 @@ class RunInstructionUntilDoneTool(tool.Tool):
     start_time = time.time()
     # Sends instruction to the robot.
     run_response: types.FunctionResponse = (
-        await self._run_instruction_tool.fn(instruction, call_id)
+        await self._run_instruction_tool.fn(instruction, call_id)  # pyrefly: ignore[bad-assignment]
     )
     if run_response.response is not None:
       output = run_response.response.get("output", run_response.response)
@@ -133,7 +133,7 @@ class RunInstructionUntilDoneTool(tool.Tool):
             will_continue=False,
         )
     # Check if instruction was successful.
-    sd_response: types.FunctionResponse = await self._success_detector_tool.fn(
+    sd_response: types.FunctionResponse = await self._success_detector_tool.fn(  # pyrefly: ignore[bad-assignment]
         instruction, call_id
     )
     # Wait until minimum run duration is reached.
@@ -144,7 +144,7 @@ class RunInstructionUntilDoneTool(tool.Tool):
     # Stop the robot if needed.
     if (
         self._stop_tool
-        and sd_response.response["task_success"]
+        and sd_response.response["task_success"]  # pyrefly: ignore[unsupported-operation]
         and self._config is not None
         and self._config.stop_on_success
     ):
@@ -157,10 +157,10 @@ class RunInstructionUntilDoneTool(tool.Tool):
         "subtask": instruction,
         "is_robot_stopped": stopped,
     }
-    if sd_response.response["timeout"]:
+    if sd_response.response["timeout"]:  # pyrefly: ignore[unsupported-operation]
       response["subtask_status"] = "time limit reached"
     elif self._make_success_known_to_agent:
-      response["subtask_success"] = sd_response.response["task_success"]
+      response["subtask_success"] = sd_response.response["task_success"]  # pyrefly: ignore[unsupported-operation]
     return types.FunctionResponse(
         response=response,
         will_continue=False,

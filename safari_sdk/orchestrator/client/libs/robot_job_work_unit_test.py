@@ -190,7 +190,7 @@ class RobotJobWorkUnitTest(absltest.TestCase):
         robot_job_work_unit.work_unit.WorkUnitOutcome.WORK_UNIT_OUTCOME_UNSPECIFIED,
     )
     self.assertEqual(response.work_unit.note, "Work Unit queued to robot.")
-    questions = response.work_unit.context.questions
+    questions = response.work_unit.context.questions  # pyrefly: ignore[missing-attribute]
     self.assertLen(questions, 1)
     self.assertEqual(
         questions[0].question, "test_question_1"
@@ -1298,7 +1298,7 @@ class RobotJobWorkUnitTest(absltest.TestCase):
         robot_job_work_unit.work_unit.WorkUnitOutcome.WORK_UNIT_OUTCOME_UNSPECIFIED,
     )
     self.assertEqual(response.work_unit.note, "Work Unit queued to robot.")
-    questions = response.work_unit.context.questions
+    questions = response.work_unit.context.questions  # pyrefly: ignore[missing-attribute]
     self.assertLen(questions, 1)
     self.assertEqual(questions[0].question, "test_question_1")
     self.assertEqual(

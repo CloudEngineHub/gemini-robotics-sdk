@@ -15,10 +15,12 @@
 import time
 from unittest import mock
 
+from google.protobuf import struct_pb2
 from absl.testing import absltest
 from safari_sdk.logging.python import base_logger
 from safari_sdk.logging.python import constants
 from safari_sdk.protos import label_pb2
+from safari_sdk.protos.logging import constants_pb2
 
 
 class BaseLoggerTest(absltest.TestCase):
@@ -196,6 +198,81 @@ class BaseLoggerTest(absltest.TestCase):
         RuntimeError, 'Failed to stop log writer thread within 2 minutes'
     ):
       logger.stop_session(stop_nsec=2000)
+
+  def test_add_setup_config_before_start_raises_error(self):
+    logger = base_logger.BaseLogger(
+        agent_id=self.agent_id,
+        output_directory=self.output_dir,
+        required_topics=self.required_topics,
+    )
+    config = struct_pb2.Value(string_value='value1')
+    with self.assertRaisesRegex(
+        ValueError,
+        'add_setup_config.*called before session has been started',
+    ):
+      logger.add_setup_config('config1', config)
+
+  def test_add_setup_config(self):
+    logger = base_logger.BaseLogger(
+        agent_id=self.agent_id,
+        output_directory=self.output_dir,
+        required_topics=self.required_topics,
+    )
+    logger.start_session(
+        start_nsec=1000, task_id='task_123', output_file_prefix='test_pref'
+    )
+    config1 = struct_pb2.Value(string_value='value1')
+    config2 = struct_pb2.Value(string_value='value2')
+    logger.add_setup_config('config1', config1)
+    logger.add_setup_config('config2', config2)
+    self.assertLen(logger._session.setup_configs, 2)
+    self.assertEqual(logger._session.setup_configs['config1'], config1)
+    self.assertEqual(logger._session.setup_configs['config2'], config2)
+    logger.stop_session(stop_nsec=2000)
+
+  def test_add_setup_config_overwrites_existing_config(self):
+    logger = base_logger.BaseLogger(
+        agent_id=self.agent_id,
+        output_directory=self.output_dir,
+        required_topics=self.required_topics,
+    )
+    logger.start_session(
+        start_nsec=1000, task_id='task_123', output_file_prefix='test_pref'
+    )
+    config1 = struct_pb2.Value(string_value='value1')
+    config2 = struct_pb2.Value(string_value='value2')
+    logger.add_setup_config('config1', config1)
+    logger.add_setup_config('config1', config2)
+    self.assertLen(logger._session.setup_configs, 1)
+    self.assertEqual(logger._session.setup_configs['config1'], config2)
+    logger.stop_session(stop_nsec=2000)
+
+  def test_add_setup_config_with_enum_config_id(self):
+    logger = base_logger.BaseLogger(
+        agent_id=self.agent_id,
+        output_directory=self.output_dir,
+        required_topics=self.required_topics,
+    )
+    logger.start_session(
+        start_nsec=1000, task_id='task_123', output_file_prefix='test_pref'
+    )
+    config = struct_pb2.Value(string_value='value1')
+    logger.add_setup_config(
+        constants_pb2.SetupConfig.Name(
+            constants_pb2.SetupConfig.SETUP_CONFIG_EXTERNAL_CAMERA_NAMES
+        ),
+        config,
+    )
+    self.assertLen(logger._session.setup_configs, 1)
+    self.assertEqual(
+        logger._session.setup_configs[
+            constants_pb2.SetupConfig.Name(
+                constants_pb2.SetupConfig.SETUP_CONFIG_EXTERNAL_CAMERA_NAMES
+            )
+        ],
+        config,
+    )
+    logger.stop_session(stop_nsec=2000)
 
 
 if __name__ == '__main__':

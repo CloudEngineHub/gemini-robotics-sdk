@@ -450,7 +450,7 @@ def evaluate_checkpoint(
   proprio_keys = metadata.proprio_keys
 
   # Build timestep spec from first episode
-  ts_spec = _build_timestep_spec(episodes[0], image_keys, proprio_keys)
+  ts_spec = _build_timestep_spec(episodes[0], image_keys, proprio_keys)  # pyrefly: ignore[bad-argument-type]
 
   # Create policy
   logging.info(
@@ -460,8 +460,8 @@ def evaluate_checkpoint(
   policy = gemini_robotics_policy.GeminiRoboticsPolicy(
       serve_id=f'grpc://localhost:{_SERVE_PORT.value}',
       task_instruction_key=_INSTRUCTION_KEY,
-      image_observation_keys=tuple(image_keys),
-      proprioceptive_observation_keys=tuple(proprio_keys),
+      image_observation_keys=tuple(image_keys),  # pyrefly: ignore[bad-argument-type]
+      proprioceptive_observation_keys=tuple(proprio_keys),  # pyrefly: ignore[bad-argument-type]
       inference_mode=constants.InferenceMode.SYNCHRONOUS,
       robotics_api_connection=(constants.RoboticsApiConnectionType.LOCAL),
       min_replan_interval=_MIN_REPLAN_INTERVAL.value,
@@ -503,8 +503,8 @@ def evaluate_checkpoint(
       obs = _build_observation(
           episode,
           step,
-          image_keys,
-          proprio_keys,
+          image_keys,  # pyrefly: ignore[bad-argument-type]
+          proprio_keys,  # pyrefly: ignore[bad-argument-type]
       )
       if step == 0:
         timestep = dm_env.restart(observation=obs)
@@ -549,7 +549,7 @@ def evaluate_checkpoint(
         action = (
             predicted_actions[-1]
             if predicted_actions
-            else np.zeros(metadata.action_dim)
+            else np.zeros(metadata.action_dim)  # pyrefly: ignore[no-matching-overload]
         )
       else:
         status, payload = result_q.get_nowait()
@@ -564,7 +564,7 @@ def evaluate_checkpoint(
           action = (
               predicted_actions[-1]
               if predicted_actions
-              else np.zeros(metadata.action_dim)
+              else np.zeros(metadata.action_dim)  # pyrefly: ignore[no-matching-overload]
           )
 
       predicted_actions.append(np.array(action))
@@ -610,7 +610,7 @@ def evaluate_checkpoint(
             _OUTPUT_DIR.value,
             f'episode_{ep_idx}_actions.png',
         ),
-        action_dim=metadata.action_dim,
+        action_dim=metadata.action_dim,  # pyrefly: ignore[bad-argument-type]
         checkpoint_label=checkpoint_label,
         chunk_size=_MIN_REPLAN_INTERVAL.value,
     )

@@ -33,7 +33,6 @@ from safari_sdk.protos.logging import orchestrator_info_pb2
 from safari_sdk.protos.logging import policy_type_pb2
 from safari_sdk.protos.logging import spec_pb2
 
-
 PolicyProviderType = Callable[[], policy_type_pb2.PolicyType]
 PolicyConfigType = policy_type_pb2.PolicyType | PolicyProviderType
 
@@ -271,7 +270,7 @@ def create_spec_proto(
   if codec != codec_pb2.CODEC_NONE:
     spec_proto.dtype = dtype_pb2.DTYPE_UINT8
   else:
-    spec_proto.dtype = create_dtype_proto(spec.dtype)
+    spec_proto.dtype = create_dtype_proto(spec)
   spec_proto.codec = codec
 
   return spec_proto
@@ -304,23 +303,23 @@ def convert_spec_bound(bound: float | int | np.ndarray) -> list[float]:
   processed_values = []
   for val in values:
     if np.isinf(val):
-      if val > 0:
+      if val > 0:  # pyrefly: ignore[unsupported-operation]
         processed_values.append(sys.float_info.max)
       else:
         processed_values.append(-sys.float_info.max)
     else:
       # Ensure that the value is a float.
-      processed_values.append(float(val))
+      processed_values.append(float(val))  # pyrefly: ignore[bad-argument-type]
   return processed_values
 
 
 def create_dtype_proto(
-    dtype: np.dtype | str | type[Any],
+    spec: specs.Array,
 ) -> dtype_pb2.Dtype:
   """Creates a Dtype proto from a numpy dtype.
 
   Args:
-    dtype: The numpy dtype or string alias.
+    spec: The array spec.
 
   Returns:
     The dtype proto.
@@ -329,8 +328,9 @@ def create_dtype_proto(
     ValueError: If the dtype is not supported.
   """
   try:
-    dtype = np.dtype(dtype)
+    dtype = np.dtype(spec.dtype)
   except (TypeError, ValueError):
+    dtype = spec.dtype
     pass
 
   if dtype == np.uint8:
@@ -350,4 +350,4 @@ def create_dtype_proto(
   elif dtype == np.str_ or dtype == np.object_:
     return dtype_pb2.DTYPE_STRING
 
-  raise ValueError(f"Unsupported dtype {dtype} used in spec.")
+  raise ValueError(f"Unsupported dtype {dtype} used in {spec}.")

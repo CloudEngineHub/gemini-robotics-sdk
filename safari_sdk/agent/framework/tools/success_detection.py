@@ -201,7 +201,7 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
   ):
     super().__init__(
         bus=bus,
-        fn=self.detect_success,
+        fn=self.detect_success,  # pyrefly: ignore[bad-argument-type]
         declaration=types.FunctionDeclaration(
             name="detect_success",
             description=(
@@ -230,7 +230,7 @@ class SubtaskSuccessDetectorV4(VisionSuccessDetectionTool):
         ),
         config=config,
         api_key=api_key,
-        camera_endpoint_names=sd_camera_endpoint_names,
+        camera_endpoint_names=sd_camera_endpoint_names,  # pyrefly: ignore[bad-argument-type]
     )
 
     self._task = None

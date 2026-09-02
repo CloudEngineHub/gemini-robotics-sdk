@@ -1513,7 +1513,7 @@ class OrchestratorHelperTest(absltest.TestCase):
             uri="test_artifact_uri",
             artifactId="test_artifact_id",
             name="test_name",
-            artifactObjectType="ARTIFACT_OBJECT_TYPE_IMAGE",
+            artifactObjectType="ARTIFACT_OBJECT_TYPE_IMAGE",  # pyrefly: ignore[bad-argument-type]
             commitTime="2025-01-01T00:00:00Z",
             tags=["tag1", "tag2"],
             version="1",
@@ -1528,17 +1528,17 @@ class OrchestratorHelperTest(absltest.TestCase):
 
     response = helper_lib.get_artifact(artifact_id="test_artifact_id")
     self.assertTrue(response.success)
-    self.assertEqual(response.artifact.uri, "test_artifact_uri")
-    self.assertEqual(response.artifact.artifactId, "test_artifact_id")
-    self.assertEqual(response.artifact.name, "test_name")
+    self.assertEqual(response.artifact.uri, "test_artifact_uri")  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(response.artifact.artifactId, "test_artifact_id")  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(response.artifact.name, "test_name")  # pyrefly: ignore[missing-attribute]
     self.assertEqual(
-        response.artifact.artifactObjectType,
+        response.artifact.artifactObjectType,  # pyrefly: ignore[missing-attribute]
         "ARTIFACT_OBJECT_TYPE_IMAGE",
     )
-    self.assertEqual(response.artifact.commitTime, "2025-01-01T00:00:00Z")
-    self.assertEqual(response.artifact.tags, ["tag1", "tag2"])
-    self.assertEqual(response.artifact.version, "1")
-    self.assertFalse(response.artifact.isZipped)
+    self.assertEqual(response.artifact.commitTime, "2025-01-01T00:00:00Z")  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(response.artifact.tags, ["tag1", "tag2"])  # pyrefly: ignore[missing-attribute]
+    self.assertEqual(response.artifact.version, "1")  # pyrefly: ignore[missing-attribute]
+    self.assertFalse(response.artifact.isZipped)  # pyrefly: ignore[missing-attribute]
 
   def test_get_artifact_bad_without_raise_error(self):
     helper_lib = orchestrator_helper.OrchestratorHelper(
@@ -1908,9 +1908,9 @@ class OrchestratorHelperTest(absltest.TestCase):
         job_type=orchestrator_helper.JOB_TYPE.ALL,
     )
     response = helper_lib.create_kv_string("k1", "v1")
-    self.assertFalse(response.success)
+    self.assertFalse(response.success)  # pyrefly: ignore[missing-attribute]
     self.assertEqual(
-        response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION
+        response.error_message, orchestrator_helper._ERROR_NO_ACTIVE_CONNECTION  # pyrefly: ignore[missing-attribute]
     )
 
   def test_create_kv_methods_bad_with_raise_error(self):
@@ -1968,7 +1968,7 @@ class OrchestratorHelperTestWithMockInterface(absltest.TestCase):
     )
 
   def test_connects_and_gets_robot_id(self):
-    response = self.helper_lib.connect()
+    response = self.helper_lib.connect()  # pyrefly: ignore[missing-attribute]
     self.assertTrue(response.success)
     self.assertEqual(response.robot_id, "test_robot_id")
 

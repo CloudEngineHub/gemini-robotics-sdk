@@ -56,7 +56,7 @@ class SceneDescriptionTool(tool.Tool):
         behavior=types.Behavior.NON_BLOCKING,
     )
     super().__init__(
-        fn=self.describe_scene,
+        fn=self.describe_scene,  # pyrefly: ignore[bad-argument-type]
         declaration=declaration,
         bus=bus,
     )

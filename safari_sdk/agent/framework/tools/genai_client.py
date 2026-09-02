@@ -135,7 +135,7 @@ class GeminiClientWrapper:
     self._config = config
 
   def get_config(self) -> types.GenerateContentConfigOrDict:
-    return self._config
+    return self._config  # pyrefly: ignore[bad-return]
 
   async def _maybe_publish(
       self,
